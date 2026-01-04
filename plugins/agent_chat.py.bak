@@ -1,0 +1,106 @@
+"""
+AI Agent 聊天插件
+基于工具系统的智能对话
+"""
+from nonebot import on_message
+from nonebot.adapters.onebot.v11 import Bot, MessageEvent, GroupMessageEvent
+from nonebot.rule import to_me
+from nonebot.log import logger
+from nonebot.exception import FinishedException
+import sys
+import os
+
+# 添加父目录到路径
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from core.ai_agent import AIAgent
+from core.tool_manager import tool_manager
+from tools.calculator_tool import CalculatorTool
+from tools.weather_tool import WeatherTool
+
+# 注册工具
+tool_manager.register(CalculatorTool())
+tool_manager.register(WeatherTool())
+
+# 用户 AI Agent 实例字典
+user_agents: dict = {}
+
+# 创建消息处理器
+agent_chat = on_message(rule=to_me(), priority=5, block=True)
+
+
+def get_user_agent(user_id: str) -> AIAgent:
+    """获取或创建用户的 AI Agent
+    
+    Args:
+        user_id: 用户ID
+        
+    Returns:
+        AIAgent 实例
+    """
+    if user_id not in user_agents:
+        user_agents[user_id] = AIAgent()
+        logger.info(f"[Agent Chat] 为用户 {user_id} 创建新的 AI Agent")
+    return user_agents[user_id]
+
+
+@agent_chat.handle()
+async def handle_agent_chat(bot: Bot, event: MessageEvent):
+    """处理聊天消息 - 使用 AI Agent"""
+    # 获取消息文本
+    message_text = event.get_plaintext().strip()
+    user_id = event.get_user_id()
+    
+    # 判断消息来源
+    if isinstance(event, GroupMessageEvent):
+        source = f"群 {event.group_id}"
+    else:
+        source = "私聊"
+    
+    logger.info(f"[Agent Chat] 收到来自 {source} 用户 {user_id} 的消息: {message_text}")
+    
+    # 空消息处理
+    if not message_text:
+        await agent_chat.finish("你好呀！有什么可以帮你的吗？")
+    
+    # 特殊命令：清空历史
+    if message_text in ["清空历史", "重置", "/reset"]:
+        agent = get_user_agent(user_id)
+        agent.clear_history()
+        await agent_chat.finish("✅ 已清空对话历史")
+    
+    # 特殊命令：查看工具
+    if message_text in ["工具列表", "可用工具", "/tools"]:
+        tools = tool_manager.list_tools()
+        if tools:
+            tool_list = "\n".join(f"• {tool}" for tool in tools)
+            await agent_chat.finish(f"🔧 可用工具列表：\n{tool_list}")
+        else:
+            await agent_chat.finish("暂无可用工具")
+    
+    # 发送思考提示
+    await agent_chat.send("💭 思考中...")
+    
+    try:
+        # 获取用户的 AI Agent
+        agent = get_user_agent(user_id)
+        
+        # 调用 AI Agent 处理消息
+        logger.info(f"[Agent Chat] 调用 AI Agent 处理消息...")
+        reply = await agent.chat(user_message=message_text)
+        
+        if reply:
+            logger.info(f"[Agent Chat] AI Agent 回复成功，长度: {len(reply)}")
+            await agent_chat.finish(reply)
+        else:
+            logger.error(f"[Agent Chat] AI Agent 回复为空")
+            await agent_chat.finish("抱歉，我现在有点累了，稍后再聊吧~")
+    
+    except FinishedException:
+        # finish() 正常结束，不需要处理
+        raise
+    
+    except Exception as e:
+        logger.error(f"[Agent Chat] 处理消息异常: {e}", exc_info=True)
+        await agent_chat.finish("抱歉，我遇到了一些问题...")
+

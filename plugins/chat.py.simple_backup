@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+基本聊天功能插件 - 使用 DeepSeek AI
+"""
+from nonebot import on_message
+from nonebot.adapters.onebot.v11 import Bot, MessageEvent, GroupMessageEvent, Message
+from nonebot.rule import to_me
+from nonebot.log import logger
+from nonebot.exception import FinishedException
+import random
+import sys
+import os
+
+# 添加父目录到路径以便导入utils
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.deepseek_client import get_deepseek_client
+
+# 创建消息处理器 - 仅响应@机器人的消息
+chat_handler = on_message(rule=to_me(), priority=10, block=True)
+
+# 系统提示词 - 定义机器人的性格
+SYSTEM_PROMPT = """你是一个友好、活泼的AI助手。
+你的回复要：
+1. 简洁明了，不要太长
+2. 语气轻松自然，像朋友聊天
+3. 适当使用emoji让对话更生动
+4. 如果用户问候，要热情回应
+5. 如果话题太短，可以主动延伸话题"""
+
+
+@chat_handler.handle()
+async def handle_chat(bot: Bot, event: MessageEvent):
+    """处理聊天消息 - 使用 DeepSeek AI"""
+    # 获取消息文本
+    message_text = event.get_plaintext().strip()
+    user_id = event.get_user_id()
+    
+    # 判断消息来源
+    if isinstance(event, GroupMessageEvent):
+        source = f"群 {event.group_id}"
+    else:
+        source = "私聊"
+    
+    logger.info(f"[新机器人] 收到来自 {source} 的消息: {message_text}")
+    
+    # 空消息处理
+    if not message_text:
+        await chat_handler.finish("你好呀！有什么可以帮你的吗？")
+    
+    # 获取 DeepSeek 客户端
+    client = get_deepseek_client()
+    
+    # 检查 API 是否可用
+    if not client.is_available():
+        logger.warning("[新机器人] DeepSeek API 未配置，使用简单回复")
+        await chat_handler.finish(f"收到你的消息：{message_text}\n不过AI功能还没配置好呢~")
+    
+    # 发送思考提示
+    await chat_handler.send("💭 思考中...")
+    
+    try:
+        # 调用 AI
+        logger.info(f"[新机器人] 调用 DeepSeek API...")
+        ai_reply = await client.chat_simple(
+            user_message=message_text,
+            system_prompt=SYSTEM_PROMPT
+        )
+        
+        if ai_reply:
+            logger.info(f"[新机器人] AI回复成功，长度: {len(ai_reply)}")
+            await chat_handler.finish(ai_reply)
+        else:
+            logger.error(f"[新机器人] AI回复失败")
+            await chat_handler.finish("抱歉，我现在有点累了，稍后再聊吧~")
+    
+    except FinishedException:
+        # finish() 正常结束，不需要处理
+        raise
+    
+    except Exception as e:
+        logger.error(f"[新机器人] API调用异常: {e}", exc_info=True)
+        await chat_handler.finish("抱歉，我遇到了一些问题...")
+
