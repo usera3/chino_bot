@@ -1,0 +1,563 @@
+"""
+智能调度系统 - 无指令化AI助手
+自动识别用户意图，智能路由到对应功能
+实现真正的自然语言交互
+"""
+
+from nonebot import on_message
+from nonebot.adapters.onebot.v11 import MessageEvent, Message
+from nonebot.log import logger
+from nonebot.rule import to_me
+import httpx
+from typing import Dict, List, Optional, Callable, Any
+import json
+import re
+import random
+from datetime import datetime
+import asyncio
+import time
+
+# 导入智能表情管理器
+try:
+    from .emoticon_manager import emoticon_manager
+    EMOTICON_AVAILABLE = True
+except ImportError:
+    EMOTICON_AVAILABLE = False
+    logger.warning("表情管理器未加载")
+
+# 导入表情包索要处理器
+try:
+    from .emoticon_request import emoticon_request_handler
+    from .emoticon_request_state import state_manager as emoticon_state_manager
+    EMOTICON_REQUEST_AVAILABLE = True
+except ImportError:
+    EMOTICON_REQUEST_AVAILABLE = False
+    logger.warning("表情包索要系统未加载")
+
+# ==================== 配置 ====================
+class DispatcherConfig:
+    """调度器配置"""
+    API_URL = "https://api.deepseek.com/v1/chat/completions"
+    API_KEY = "sk-4b0f9fcb168046f1ab1a6103dfb56380"
+    MODEL = "deepseek-chat"
+    ENABLE_INTENT_LOG = True  # 记录意图识别日志
+    
+    # 💬 消息分段发送配置
+    ENABLE_SPLIT_SEND = True  # 启用分段发送
+    MIN_LENGTH_TO_SPLIT = 30  # 超过此长度才分段
+    TYPING_DELAY_PER_CHAR = 0.03  # 每个字符的打字延迟（秒）
+    MIN_TYPING_DELAY = 0.5  # 最小延迟
+    MAX_TYPING_DELAY = 2.0  # 最大延迟
+
+# ==================== 💬 消息分段工具 ====================
+class MessageSplitter:
+    """消息分段发送工具 - 提升用户体验"""
+    
+    @staticmethod
+    def split_message(text: str) -> List[str]:
+        """
+        按标点符号智能分段，模拟真人聊天习惯
+        - 按句号、问号、感叹号、省略号分段
+        - 去掉每段末尾的标点（真人聊天不带标点）
+        """
+        if not text or len(text) < DispatcherConfig.MIN_LENGTH_TO_SPLIT:
+            return [text]
+        
+        # 按主要标点分段（包括省略号）
+        # 省略号的各种形式：...、。。。、......
+        pattern = r'([。！？\n!?\.\.\.|。。。|……]+)'
+        parts = re.split(pattern, text)
+        
+        segments = []
+        current = ""
+        
+        for i, part in enumerate(parts):
+            if part.strip():
+                current += part
+                # 如果是标点符号，或累积够长了，就作为一段
+                if re.match(pattern, part) or len(current) > 60:
+                    if current.strip():
+                        # 💬 去掉末尾的标点符号（真人聊天习惯）
+                        cleaned = current.strip().rstrip('。！？!?…')
+                        # 处理省略号
+                        cleaned = re.sub(r'\.{2,}$', '', cleaned)  # 去掉末尾的多个点
+                        cleaned = re.sub(r'。{2,}$', '', cleaned)  # 去掉末尾的多个句号
+                        if cleaned:
+                            segments.append(cleaned)
+                        current = ""
+        
+        if current.strip():
+            # 最后一段也去掉标点
+            cleaned = current.strip().rstrip('。！？!?…')
+            cleaned = re.sub(r'\.{2,}$', '', cleaned)
+            cleaned = re.sub(r'。{2,}$', '', cleaned)
+            if cleaned:
+                segments.append(cleaned)
+        
+        return segments if segments else [text]
+    
+    @staticmethod
+    def calculate_typing_delay(text: str) -> float:
+        """计算模拟打字延迟"""
+        char_count = len(text)
+        delay = char_count * DispatcherConfig.TYPING_DELAY_PER_CHAR
+        delay = max(DispatcherConfig.MIN_TYPING_DELAY, delay)
+        delay = min(DispatcherConfig.MAX_TYPING_DELAY, delay)
+        return delay
+    
+    @staticmethod
+    def detect_emotion_simple(text: str) -> str:
+        """
+        简单的情感检测（基于关键词）
+        后续可以用AI模型替代
+        """
+        text_lower = text.lower()
+        
+        # 关键词匹配
+        if any(word in text for word in ["哈哈", "嘿嘿", "嘻嘻", "笑"]):
+            return "laugh"
+        elif any(word in text for word in ["开心", "高兴", "不错", "好的", "太好了"]):
+            return "happy"
+        elif any(word in text for word in ["对", "没错", "确实", "是的", "👍"]):
+            return "agree"
+        elif any(word in text for word in ["？", "吗", "呢", "🤔"]):
+            return "thinking"
+        elif any(word in text for word in ["谢", "感谢", "🙏"]):
+            return "thanks"
+        elif any(word in text for word in ["难过", "伤心", "😢"]):
+            return "sad"
+        elif any(word in text for word in ["哇", "哦", "！", "天"]):
+            return "surprise"
+        elif any(word in text for word in ["拜", "再见", "👋"]):
+            return "bye"
+        elif any(word in text for word in ["嗯", "嗯嗯", "唔"]):
+            return "thinking"
+        else:
+            return "neutral"
+    
+    @staticmethod
+    async def send_split_message(matcher, message: str, user_id: str = "", emotion: str = "neutral"):
+        """
+        分段发送消息，模拟真人聊天
+        
+        Args:
+            matcher: NoneBot matcher
+            message: 消息内容
+            user_id: 用户ID（用于表情管理）
+            emotion: 情感类型（用于选择表情）
+            
+        第三步新增：会尝试使用学习到的表情包
+        """
+        if not DispatcherConfig.ENABLE_SPLIT_SEND:
+            # 不分段时也可能添加表情
+            final_msg = await MessageSplitter._add_emoticon_or_learned(
+                message, user_id, emotion, 0.5, False, matcher
+            )
+            await matcher.send(final_msg)
+            return
+        
+        segments = MessageSplitter.split_message(message)
+        
+        if len(segments) <= 1:
+            # 单段消息
+            final_msg = await MessageSplitter._add_emoticon_or_learned(
+                message, user_id, emotion, 0.5, False, matcher
+            )
+            await matcher.send(final_msg)
+            return
+        
+        logger.info(f"💬 消息分为 {len(segments)} 段发送")
+        
+        for i, segment in enumerate(segments):
+            if i > 0:
+                delay = MessageSplitter.calculate_typing_delay(segment)
+                await asyncio.sleep(delay)
+            
+            # 💬 智能添加表情（不是每段都加）
+            # 是否连续消息（影响表情使用概率）
+            is_continuous = i > 0
+            # 最后一段更容易带表情
+            emotion_intensity = 0.7 if i == len(segments) - 1 else 0.4
+            
+            final_segment = await MessageSplitter._add_emoticon_or_learned(
+                segment, user_id, emotion, emotion_intensity, is_continuous, matcher
+            )
+            
+            await matcher.send(final_segment)
+            
+            # 更新消息计数
+            if EMOTICON_AVAILABLE and user_id:
+                emoticon_manager.update_message_count(user_id)
+    
+    @staticmethod
+    async def _add_emoticon_or_learned(
+        message: str,
+        user_id: str,
+        emotion: str,
+        emotion_intensity: float,
+        is_continuous: bool,
+        matcher
+    ) -> str:
+        """
+        添加表情或学习表情包
+        
+        第三步新增：会尝试使用学习到的表情包
+        
+        Returns:
+            可能包含MessageSegment的消息
+        """
+        if not EMOTICON_AVAILABLE or not user_id:
+            return message
+        
+        # 1. 判断是否应该使用表情
+        if not emoticon_manager.should_use_emoticon(user_id, emotion, emotion_intensity, is_continuous):
+            return message
+        
+        # 2. 第三步：尝试使用学习到的表情包（15%概率）
+        if random.random() < 0.15:  # 15%使用学习表情包
+            try:
+                # 提取关键词
+                keywords = MessageSplitter._extract_keywords(message)
+                
+                # 获取学习表情包
+                learned_result = await emoticon_manager.try_get_learned_emoticon_async(
+                    emotion=emotion,
+                    message=message,
+                    keywords=keywords
+                )
+                
+                if learned_result:
+                    file_path, emoticon_id = learned_result
+                    
+                    # 发送文本 + 表情包图片
+                    from nonebot.adapters.onebot.v11 import MessageSegment
+                    from pathlib import Path
+                    
+                    file_path_obj = Path(file_path)
+                    if file_path_obj.exists():
+                        # 返回复合消息：文本 + 图片
+                        logger.info(f"🎨 使用学习表情包: {file_path_obj.name}")
+                        
+                        # 记录使用（后续可根据用户反应更新）
+                        await emoticon_manager.record_learned_emoticon_usage(
+                            emoticon_id, user_id, message, success=True
+                        )
+                        
+                        # 返回带图片的消息
+                        return message + MessageSegment.image(file_path_obj)
+                    
+            except Exception as e:
+                logger.debug(f"获取学习表情失败: {e}")
+        
+        # 3. 使用普通emoji表情
+        message = emoticon_manager.add_emoticon_to_message(
+            message, user_id, emotion, emotion_intensity, is_continuous
+        )
+        
+        return message
+    
+    @staticmethod
+    def _extract_keywords(text: str) -> List[str]:
+        """提取关键词（简单实现）"""
+        # 简单的中文分词（基于标点）
+        import re
+        words = re.split(r'[，。！？\s]+', text)
+        # 过滤短词和常见词
+        stop_words = {'的', '了', '是', '我', '你', '他', '她', '它', '吗', '呢', '啊', '吧'}
+        keywords = [w for w in words if len(w) >= 2 and w not in stop_words]
+        return keywords[:5]  # 最多5个关键词
+
+# ==================== 功能注册表 ====================
+class FunctionRegistry:
+    """
+    功能注册表 - 管理所有可用功能
+    每个功能模块可以注册自己的能力
+    """
+    
+    def __init__(self):
+        self._functions: Dict[str, Dict] = {}
+    
+    def register(
+        self,
+        name: str,
+        description: str,
+        keywords: List[str],
+        handler: Callable,
+        examples: List[str] = None
+    ):
+        """
+        注册一个功能
+        
+        Args:
+            name: 功能名称
+            description: 功能描述
+            keywords: 触发关键词列表
+            handler: 处理函数
+            examples: 使用示例
+        """
+        self._functions[name] = {
+            "name": name,
+            "description": description,
+            "keywords": keywords,
+            "handler": handler,
+            "examples": examples or []
+        }
+        logger.info(f"注册功能: {name}")
+    
+    def get_all_functions_desc(self) -> str:
+        """获取所有功能的描述（用于AI理解）"""
+        if not self._functions:
+            return "当前没有可用的特殊功能，我只能进行普通对话。"
+        
+        desc = "我具有以下功能：\n"
+        for func_name, func_info in self._functions.items():
+            desc += f"\n{func_name}: {func_info['description']}"
+            if func_info['examples']:
+                desc += f"\n  示例: {', '.join(func_info['examples'][:2])}"
+        
+        return desc
+    
+    def get_function(self, name: str) -> Optional[Dict]:
+        """获取指定功能"""
+        return self._functions.get(name)
+    
+    def search_by_keywords(self, text: str) -> List[str]:
+        """通过关键词搜索可能的功能"""
+        matched = []
+        text_lower = text.lower()
+        
+        for func_name, func_info in self._functions.items():
+            for keyword in func_info['keywords']:
+                if keyword.lower() in text_lower:
+                    matched.append(func_name)
+                    break
+        
+        return matched
+
+# 全局功能注册表
+function_registry = FunctionRegistry()
+
+# ==================== 意图识别引擎 ====================
+class IntentRecognizer:
+    """
+    意图识别引擎 - 核心AI组件
+    使用DeepSeek分析用户意图
+    """
+    
+    @staticmethod
+    async def analyze_intent(user_message: str, user_id: str) -> Dict[str, Any]:
+        """
+        分析用户意图
+        
+        Returns:
+            {
+                "intent_type": "chat|function_call",
+                "function_name": "功能名称（如果是function_call）",
+                "confidence": 0.0-1.0,
+                "reasoning": "推理过程",
+                "response": "AI的回复或空"
+            }
+        """
+        # 获取功能列表
+        functions_desc = function_registry.get_all_functions_desc()
+        
+        # 构建意图分析提示词
+        system_prompt = f"""你是一个智能助手的意图识别系统。
+
+你的任务是分析用户的消息，判断用户是想：
+1. 普通聊天 (intent_type: "chat")
+2. 调用特定功能 (intent_type: "function_call")
+
+{functions_desc}
+
+请分析用户意图并以JSON格式回复：
+{{
+    "intent_type": "chat" 或 "function_call",
+    "function_name": "功能名称（仅在function_call时填写，chat时为空字符串）",
+    "confidence": 0.0-1.0,
+    "reasoning": "简短的推理说明"
+}}
+
+判断原则：
+- 如果用户明确要求某个功能（查询、统计、清理等），选择function_call
+- 如果用户只是打招呼、闲聊、询问一般问题，选择chat
+- 不确定时优先选择chat，给用户更自然的体验
+- confidence低于0.6时，选择chat
+
+注意：不要生成response字段，聊天回复将由专门的聊天系统处理。
+"""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message}
+        ]
+        
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.post(
+                    DispatcherConfig.API_URL,
+                    headers={
+                        "Authorization": f"Bearer {DispatcherConfig.API_KEY}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": DispatcherConfig.MODEL,
+                        "messages": messages,
+                        "temperature": 0.3,  # 降低温度，更准确
+                        "max_tokens": 500
+                    }
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    ai_reply = result["choices"][0]["message"]["content"]
+                    
+                    # 提取JSON
+                    intent_data = IntentRecognizer._extract_json(ai_reply)
+                    
+                    if DispatcherConfig.ENABLE_INTENT_LOG:
+                        logger.info(f"意图识别: {intent_data}")
+                    
+                    return intent_data
+                else:
+                    logger.error(f"意图识别失败: {response.status_code}")
+                    return IntentRecognizer._default_intent(user_message)
+                    
+        except Exception as e:
+            logger.error(f"意图识别异常: {e}")
+            return IntentRecognizer._default_intent(user_message)
+    
+    @staticmethod
+    def _extract_json(text: str) -> Dict:
+        """从AI回复中提取JSON"""
+        try:
+            # 尝试找到JSON代码块
+            json_match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group(1))
+            
+            # 尝试直接解析
+            json_match = re.search(r'\{.*\}', text, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group(0))
+            
+            # 解析失败，返回默认
+            return {
+                "intent_type": "chat",
+                "function_name": "",
+                "confidence": 0.5,
+                "reasoning": "无法解析AI回复"
+            }
+        except:
+            return {
+                "intent_type": "chat",
+                "function_name": "",
+                "confidence": 0.5,
+                "reasoning": "JSON解析失败"
+            }
+    
+    @staticmethod
+    def _default_intent(message: str) -> Dict:
+        """返回默认意图（聊天）"""
+        return {
+            "intent_type": "chat",
+            "function_name": "",
+            "confidence": 0.5,
+            "reasoning": "API调用失败，默认为聊天"
+        }
+
+# ==================== 智能调度器 ====================
+class IntelligentDispatcher:
+    """
+    智能调度器 - 协调整个系统
+    """
+    
+    @staticmethod
+    async def process(event: MessageEvent, user_message: str):
+        """
+        处理用户消息的主流程
+        """
+        user_id = str(event.user_id)
+        
+        # Step 1: 快速关键词匹配（优化性能）
+        quick_match = function_registry.search_by_keywords(user_message)
+        
+        # Step 2: AI意图识别
+        intent = await IntentRecognizer.analyze_intent(user_message, user_id)
+        
+        # Step 3: 决策和路由
+        if intent["intent_type"] == "function_call" and intent.get("function_name"):
+            # 调用特定功能
+            return await IntelligentDispatcher._call_function(
+                intent["function_name"],
+                user_message,
+                event,
+                intent
+            )
+        else:
+            # 普通聊天
+            return await IntelligentDispatcher._handle_chat(
+                user_message,
+                user_id,
+                intent
+            )
+    
+    @staticmethod
+    async def _call_function(
+        function_name: str,
+        user_message: str,
+        event: MessageEvent,
+        intent: Dict
+    ) -> str:
+        """调用指定功能"""
+        func_info = function_registry.get_function(function_name)
+        
+        if not func_info:
+            return f"抱歉，我理解你想使用 {function_name} 功能，但我还没有学会这个。"
+        
+        try:
+            # 调用功能处理器
+            result = await func_info["handler"](user_message, event)
+            
+            # 如果功能返回None，说明功能内部已经发送了消息
+            if result is None:
+                return None
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"功能调用失败 [{function_name}]: {e}")
+            return f"抱歉，执行 {function_name} 时出现了问题。"
+    
+    @staticmethod
+    async def _handle_chat(
+        user_message: str,
+        user_id: str,
+        intent: Dict
+    ) -> str:
+        """
+        处理普通聊天 - 调用高级聊天系统
+        这样可以利用完整的记忆、摘要、重要性评分等功能
+        """
+        try:
+            # 使用新的聊天服务
+            from services.chat.chat_service import get_chat_service
+            
+            chat_service = get_chat_service()
+            reply = await chat_service.process_message(user_id, user_message)
+            
+            if reply:
+                logger.info(f"用户 {user_id} 对话处理完成")
+                return reply
+            else:
+                logger.warning("AI API返回空回复")
+                return "抱歉，我现在有点累了，等会再聊好吗？"
+                
+        except Exception as e:
+            logger.error(f"聊天处理失败: {e}")
+            logger.exception(e)
+            return "我们聊点别的吧？"
+
+# ==================== 功能模块注册 ====================
+
+async def handle_memory_stats(message: str, event: MessageEvent) -> str:

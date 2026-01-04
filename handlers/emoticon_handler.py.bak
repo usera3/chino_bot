@@ -1,0 +1,275 @@
+"""
+表情包入口 - Handler Layer
+职责：监听表情包消息，处理学习和索要
+代码量：~200 行
+"""
+from nonebot import on_message, on_command
+from nonebot.adapters.onebot.v11 import Bot, MessageEvent, GroupMessageEvent, MessageSegment, Message
+from nonebot.log import logger
+from nonebot.rule import to_me
+from nonebot.params import CommandArg
+from typing import List
+from collections import deque
+import re
+
+# 导入服务层
+from services.emoticon import get_emoticon_service, get_emoticon_sender, EmoticonConfig
+
+# ==================== 上下文管理 ====================
+class ContextManager:
+    """上下文管理器 - 记录最近的对话"""
+    
+    def __init__(self, max_messages: int = 10):
+        self.contexts = {}  # key: user_id 或 group_id
+        self.max_messages = max_messages
+    
+    def add_message(self, key: str, message: str):
+        """添加消息到上下文"""
+        if key not in self.contexts:
+            self.contexts[key] = deque(maxlen=self.max_messages)
+        self.contexts[key].append(message)
+    
+    def get_context(self, key: str) -> List[str]:
+        """获取上下文"""
+        if key in self.contexts:
+            return list(self.contexts[key])
+        return []
+
+context_manager = ContextManager(max_messages=EmoticonConfig.MAX_CONTEXT_MESSAGES)
+
+# ==================== 消息监听 ====================
+# 监听所有消息（优先级低，不阻断）
+message_listener = on_message(priority=99, block=False)
+
+@message_listener.handle()
+async def handle_all_messages(bot: Bot, event: MessageEvent):
+    """
+    监听所有消息，用于：
+    1. 记录上下文
+    2. 自动学习表情包
+    """
+    user_id = str(event.user_id)
+    group_id = str(event.group_id) if isinstance(event, GroupMessageEvent) else None
+    context_key = group_id if group_id else user_id
+    
+    # 提取纯文本消息
+    plain_text = event.message.extract_plain_text().strip()
+    if plain_text:
+        context_manager.add_message(context_key, plain_text)
+    
+    # 检查是否包含图片
+    images = [seg for seg in event.message if seg.type == "image"]
+    if not images:
+        return
+    
+    # 自动学习表情包（如果启用）
+    if not EmoticonConfig.ENABLE_LEARNING:
+        return
+    
+    # 检查是否应该从这个来源学习
+    if group_id and not EmoticonConfig.AUTO_LEARN_FROM_GROUPS:
+        return
+    if not group_id and not EmoticonConfig.AUTO_LEARN_FROM_PRIVATE:
+        return
+    
+    emoticon_service = get_emoticon_service()
+    
+    for image in images:
+        image_url = image.data.get("url")
+        if not image_url:
+            continue
+        
+        try:
+            # 获取上下文
+            context_messages = context_manager.get_context(context_key)
+            
+            # 学习表情包
+            learned = await emoticon_service.learn_emoticon(
+                image_url=image_url,
+                user_id=user_id,
+                group_id=group_id,
+                context_messages=context_messages
+            )
+            
+            if learned:
+                logger.success(f"📦 学习新表情包: {learned.emotion} | {learned.scene}")
+        
+        except Exception as e:
+            logger.error(f"学习表情包失败: {e}")
+
+# ==================== 表情包索要命令 ====================
+request_emoticon = on_command("要表情包", aliases={"来个表情包", "给我表情包"}, priority=5, block=True)
+request_specific_emoticon = on_message(priority=10, block=False)
+
+@request_emoticon.handle()
+async def handle_request_emoticon(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
+    """处理表情包索要命令"""
+    user_id = str(event.user_id)
+    query = args.extract_plain_text().strip()
+    
+    emoticon_service = get_emoticon_service()
+    
+    # 解析需求
+    emotion, keywords = _parse_request(query)
+    
+    # 搜索表情包
+    emoticons = await emoticon_service.search_emoticons(
+        query=query if query else None,
+        emotion=emotion,
+        keywords=keywords,
+        limit=EmoticonConfig.REQUEST_MAX_RESULTS
+    )
+    
+    if not emoticons:
+        await request_emoticon.send("😔 抱歉，没找到合适的表情包呢")
+        return
+    
+    # 发送表情包
+    try:
+        for emoticon in emoticons[:3]:  # 最多发3个
+            # 发送图片
+            await request_emoticon.send(
+                MessageSegment.image(f"file:///{emoticon.file_path}")
+            )
+            
+            # 记录使用
+            await emoticon_service.record_usage(
+                emoticon_id=emoticon.id,
+                user_id=user_id,
+                trigger_keywords=keywords,
+                context_emotion=emotion,
+                match_score=0.8
+            )
+        
+        logger.info(f"✅ 为用户 {user_id} 发送了 {len(emoticons[:3])} 个表情包")
+    
+    except Exception as e:
+        logger.error(f"发送表情包失败: {e}")
+        await request_emoticon.send("❌ 表情包发送失败了")
+
+@request_specific_emoticon.handle()
+async def handle_specific_request(bot: Bot, event: MessageEvent):
+    """处理特定形式的表情包请求（如"来个开心的表情包"）"""
+    message = event.message.extract_plain_text().strip()
+    
+    # 匹配模式：来个XX表情包、要XX表情、给我XX图
+    patterns = [
+        r'来[个一](.+?)表情',
+        r'要(.+?)表情',
+        r'给我(.+?)[图包]',
+    ]
+    
+    matched = False
+    query = ""
+    
+    for pattern in patterns:
+        match = re.search(pattern, message)
+        if match:
+            query = match.group(1)
+            matched = True
+            break
+    
+    if not matched:
+        return
+    
+    user_id = str(event.user_id)
+    emoticon_service = get_emoticon_service()
+    
+    # 解析需求
+    emotion, keywords = _parse_request(query)
+    
+    # 搜索表情包
+    emoticons = await emoticon_service.search_emoticons(
+        query=query,
+        emotion=emotion,
+        keywords=keywords,
+        limit=2
+    )
+    
+    if not emoticons:
+        await request_specific_emoticon.send("😔 没找到呢")
+        return
+    
+    # 发送表情包
+    try:
+        for emoticon in emoticons:
+            await request_specific_emoticon.send(
+                MessageSegment.image(f"file:///{emoticon.file_path}")
+            )
+            
+            # 记录使用
+            await emoticon_service.record_usage(
+                emoticon_id=emoticon.id,
+                user_id=user_id,
+                trigger_keywords=keywords,
+                context_emotion=emotion
+            )
+        
+        logger.info(f"✅ 响应特定请求，发送 {len(emoticons)} 个表情包")
+    
+    except Exception as e:
+        logger.error(f"发送表情包失败: {e}")
+
+# ==================== 表情包管理命令 ====================
+emoticon_stats = on_command("表情包统计", aliases={"emoticon_stats"}, priority=5, block=True)
+
+@emoticon_stats.handle()
+async def handle_emoticon_stats(bot: Bot, event: MessageEvent):
+    """查看表情包统计"""
+    emoticon_service = get_emoticon_service()
+    stats = await emoticon_service.get_emoticon_stats()
+    
+    total = stats.get('total', 0)
+    total_usage = stats.get('total_usage', 0)
+    by_emotion = stats.get('by_emotion', {})
+    
+    msg = f"📊 表情包统计\n"
+    msg += f"━━━━━━━━━━━━\n"
+    msg += f"📦 总数: {total} 个\n"
+    msg += f"📈 总使用: {total_usage} 次\n"
+    
+    if by_emotion:
+        msg += f"\n按情感分类:\n"
+        for emotion, count in sorted(by_emotion.items(), key=lambda x: x[1], reverse=True):
+            msg += f"  • {emotion}: {count} 个\n"
+    
+    await emoticon_stats.send(msg)
+
+# ==================== 辅助函数 ====================
+def _parse_request(query: str) -> tuple[str, List[str]]:
+    """
+    解析请求，提取情感和关键词
+    
+    Returns:
+        (emotion, keywords)
+    """
+    emotion = None
+    keywords = []
+    
+    if not query:
+        return emotion, keywords
+    
+    # 检查情感关键词
+    for emotion_key, patterns in EmoticonConfig.REQUEST_PATTERNS.items():
+        for pattern in patterns:
+            if pattern in query:
+                emotion = emotion_key
+                keywords.append(pattern)
+                break
+        if emotion:
+            break
+    
+    # 提取其他关键词（简单分词）
+    if not keywords and query:
+        keywords = [query]
+    
+    return emotion, keywords[:3]  # 最多3个关键词
+
+# ==================== 系统初始化 ====================
+logger.success("🎨 表情包 Handler 已加载")
+logger.info(f"  - 学习功能: {'✅' if EmoticonConfig.ENABLE_LEARNING else '❌'}")
+logger.info(f"  - 支持命令: /要表情包, /表情包统计")
+logger.info(f"  - 自动学习: 群聊{'✅' if EmoticonConfig.AUTO_LEARN_FROM_GROUPS else '❌'} | 私聊{'✅' if EmoticonConfig.AUTO_LEARN_FROM_PRIVATE else '❌'}")
+
+
+

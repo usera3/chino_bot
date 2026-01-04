@@ -1,0 +1,400 @@
+async def handle_memory_stats(message: str, event: MessageEvent) -> str:
+    """处理记忆统计查询"""
+    try:
+        from services.chat.chat_service import get_chat_service
+        
+        user_id = str(event.user_id)
+        chat_service = get_chat_service()
+        stats = await chat_service.get_memory_stats(user_id)
+        
+        return (
+            f"📊 让我看看我们的聊天记录...\n\n"
+            f"我记得我们一共聊了 {stats['total_messages']} 条消息\n"
+            f"最近活跃的有 {stats['recent_count']} 条\n"
+            f"其中比较重要的有 {stats['important_count']} 条\n"
+            f"历史摘要有 {stats['summary_count']} 个\n\n"
+            f"最后一次聊天是 {stats['last_active'].strftime('%Y-%m-%d %H:%M')}"
+        )
+    except Exception as e:
+        logger.error(f"记忆统计失败: {e}")
+        return "让我想想...好像记不太清了，可能需要休息一下。"
+
+async def handle_clear_memory(message: str, event: MessageEvent) -> str:
+    """处理清空记忆请求（智能判断清除范围）"""
+    try:
+        from services.database.database_service import get_database_service
+        db_manager = get_database_service()
+        
+        user_id = str(event.user_id)
+        
+        # 检查用户是否在角色中
+        role_profile = await db_manager.get_role_profile(user_id)
+        
+        if role_profile and role_profile.is_active:
+            # 在角色中：只清除当前角色的对话
+            await db_manager.clear_role_conversations(user_id, role_profile.id)
+            return f"✨ 好的，我已经忘记我们在「{role_profile.role_name}」角色中的对话了。但我还记得这个角色的设定，可以继续扮演。"
+        else:
+            # 不在角色中：清除默认对话（无角色的对话）
+            await db_manager.clear_role_conversations(user_id, None)
+            return "✨ 好的，我已经忘记我们之前的对话了。让我们重新开始吧！"
+        
+    except Exception as e:
+        logger.error(f"清空记忆失败: {e}")
+        logger.exception(e)
+        return "抱歉，我现在记忆有点混乱，清理失败了。"
+
+async def handle_clear_all_memory(message: str, event: MessageEvent) -> str:
+    """清除所有对话（包括所有角色）"""
+    try:
+        from services.database.database_service import get_database_service
+        db_manager = get_database_service()
+        
+        user_id = str(event.user_id)
+        await db_manager.clear_all_conversations(user_id)
+        
+        return "✨ 好的，我已经忘记了我们所有的对话（包括所有角色的对话）。让我们全新开始吧！"
+        
+    except Exception as e:
+        logger.error(f"清空所有记忆失败: {e}")
+        logger.exception(e)
+        return "抱歉，清理失败了。"
+
+async def handle_list_roles(message: str, event: MessageEvent) -> str:
+    """列出用户的所有角色"""
+    try:
+        from services.database.database_service import get_database_service
+        db_manager = get_database_service()
+        
+        user_id = str(event.user_id)
+        roles = await db_manager.list_user_roles(user_id)
+        
+        if not roles:
+            return "你还没有创建过任何角色呢。试试说'扮演XXX'来创建一个吧！"
+        
+        result = "🎭 你的角色列表：\n\n"
+        for i, role in enumerate(roles, 1):
+            status = "✅ 当前" if role.is_active else "⏸️ 未激活"
+            result += f"{i}. {role.role_name} {status}\n"
+            result += f"   创建于: {role.created_at.strftime('%Y-%m-%d')}\n"
+        
+        result += "\n💡 提示：\n"
+        result += "- 说'扮演XXX'切换角色\n"
+        result += "- 说'退出角色'回到默认模式\n"
+        result += "- 说'删除角色XXX'删除不需要的角色"
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"列出角色失败: {e}")
+        logger.exception(e)
+        return "抱歉，获取角色列表失败了。"
+
+async def handle_delete_role(message: str, event: MessageEvent) -> str:
+    """删除指定角色"""
+    try:
+        from services.database.database_service import get_database_service
+        db_manager = get_database_service()
+        
+        user_id = str(event.user_id)
+        
+        # 从消息中提取要删除的角色名
+        role_patterns = [
+            r'删除角色[：:]\s*(.+)',
+            r'删除(.+)角色',
+            r'移除角色[：:]\s*(.+)',
+        ]
+        
+        role_name = None
+        for pattern in role_patterns:
+            match = re.search(pattern, message)
+            if match:
+                role_name = match.group(1).strip()
+                break
+        
+        if not role_name:
+            return "请告诉我要删除哪个角色，比如：'删除角色：猫娘'"
+        
+        # 查找角色
+        roles = await db_manager.list_user_roles(user_id)
+        target_role = None
+        for role in roles:
+            if role_name in role.role_name or role.role_name in role_name:
+                target_role = role
+                break
+        
+        if not target_role:
+            return f"我没有找到名为'{role_name}'的角色。试试'我的角色'查看所有角色。"
+        
+        # 删除角色
+        await db_manager.delete_role_profile(user_id, target_role.id)
+        
+        return f"✅ 已删除角色「{target_role.role_name}」及其所有对话记录。"
+        
+    except Exception as e:
+        logger.error(f"删除角色失败: {e}")
+        logger.exception(e)
+        return "抱歉，删除角色失败了。"
+
+async def handle_role_play(message: str, event: MessageEvent) -> str:
+    """处理角色扮演请求"""
+    try:
+        from services.chat.chat_service import get_chat_service
+        
+        user_id = str(event.user_id)
+        
+        # 从消息中提取角色名称
+        # 支持多种表达方式："扮演猫娘"、"你是猫娘"、"变成猫娘"、"角色：猫娘"
+        role_patterns = [
+            r'扮演(.+)',
+            r'你是(.+)',
+            r'变成(.+)',
+            r'当(.+)',
+            r'角色[：:]\s*(.+)',
+            r'成为(.+)',
+            r'做(.+)'
+        ]
+        
+        role_name = None
+        for pattern in role_patterns:
+            match = re.search(pattern, message)
+            if match:
+                role_name = match.group(1).strip()
+                # 清理常见的干扰词
+                role_name = re.sub(r'[的吧呀啊。！？，,\.\?!]', '', role_name)
+                break
+        
+        if not role_name:
+            return "好的！请告诉我你想让我扮演什么角色？比如：'扮演猫娘'、'你是一个智能助手'等。"
+        
+        logger.info(f"用户 {user_id} 请求角色扮演: {role_name}")
+        
+        # 使用聊天服务设置角色
+        chat_service = get_chat_service()
+        success, message_text = await chat_service.set_user_role(user_id, role_name)
+        
+        if success:
+            return f"好的！我现在是{role_name}了。让我们开始吧！"
+        else:
+            return message_text
+        
+    except Exception as e:
+        logger.error(f"角色扮演设置失败: {e}")
+        logger.exception(e)
+        return "抱歉，角色设置失败了。让我们继续正常聊天吧。"
+
+async def handle_exit_role(message: str, event: MessageEvent) -> str:
+    """处理退出角色扮演"""
+    try:
+        from services.database.database_service import get_database_service
+        db_manager = get_database_service()
+        
+        user_id = str(event.user_id)
+        
+        # 检查是否有激活的角色
+        role_profile = await db_manager.get_role_profile(user_id)
+        
+        if not role_profile or not role_profile.is_active:
+            return "我现在没有扮演任何角色哦，一直都是我本人在和你聊天。"
+        
+        role_name = role_profile.role_name
+        
+        # 退出角色
+        await db_manager.deactivate_role(user_id)
+        
+        return f"好的，我退出{role_name}的角色了。现在我又是普通的AI助手了。"
+        
+    except Exception as e:
+        logger.error(f"退出角色失败: {e}")
+        return "好的，我明白了。让我们继续聊天吧。"
+
+async def handle_help_request(message: str, event: MessageEvent) -> str:
+    """处理帮助请求"""
+    functions_desc = function_registry.get_all_functions_desc()
+    
+    help_text = (
+        "👋 你好！我是智能AI助手。\n\n"
+        "💡 **无需记住任何指令！**\n"
+        "你可以直接用自然语言和我交流，我会自动理解你的意思。\n\n"
+        "✨ **我能做什么？**\n"
+        "- 💬 自然对话：随便聊天，我会记住我们的对话\n"
+        "- 🧠 长期记忆：我不会忘记你告诉我的重要信息\n"
+        "- 🎭 角色扮演：说'扮演XXX'我就能变成任何角色\n"
+        "- 📊 查询统计：问我'我们聊了多少'就能查看\n"
+        "- 🔄 重置记忆：说'忘记我'就能清空记忆\n\n"
+        "🎯 **使用示例：**\n"
+        "- \"你好\" → 打招呼\n"
+        "- \"扮演猫娘\" → 角色扮演\n"
+        "- \"退出角色\" → 回到正常模式\n"
+        "- \"我叫张三，记住我\" → 告诉我信息\n"
+        "- \"我们聊了多少条消息？\" → 查看统计\n\n"
+        "😊 直接开始聊天吧，不用想指令的事！"
+    )
+    
+    return help_text
+
+# 注册内置功能
+function_registry.register(
+    name="role_play",
+    description="进入角色扮演模式，AI会扮演指定的角色",
+    keywords=["扮演", "角色", "你是", "变成", "当", "成为", "做"],
+    handler=handle_role_play,
+    examples=["扮演猫娘", "你是一个教授", "变成医生"]
+)
+
+function_registry.register(
+    name="exit_role",
+    description="退出当前角色扮演，回到正常模式",
+    keywords=["退出角色", "取消角色", "不要扮演", "回到正常", "别装了"],
+    handler=handle_exit_role,
+    examples=["退出角色", "不用扮演了", "回到正常"]
+)
+
+function_registry.register(
+    name="memory_stats",
+    description="查看对话统计和记忆信息",
+    keywords=["统计", "记录", "多少", "聊了", "消息数", "记忆", "历史"],
+    handler=handle_memory_stats,
+    examples=["我们聊了多少？", "查看聊天记录", "统计信息"]
+)
+
+function_registry.register(
+    name="clear_memory",
+    description="清空所有对话记忆",
+    keywords=["清空", "忘记", "删除", "重置", "清理记忆"],
+    handler=handle_clear_memory,
+    examples=["忘记我吧", "清空记忆", "重置对话"]
+)
+
+function_registry.register(
+    name="help",
+    description="显示帮助信息和使用指南",
+    keywords=["帮助", "help", "怎么用", "使用", "功能", "能做什么"],
+    handler=handle_help_request,
+    examples=["你能做什么？", "帮助", "怎么使用"]
+)
+
+function_registry.register(
+    name="list_roles",
+    description="查看我的所有角色列表",
+    keywords=["我的角色", "角色列表", "查看角色", "所有角色"],
+    handler=handle_list_roles,
+    examples=["我的角色", "角色列表", "查看所有角色"]
+)
+
+function_registry.register(
+    name="delete_role",
+    description="删除指定的角色及其对话",
+    keywords=["删除角色", "移除角色", "删掉角色"],
+    handler=handle_delete_role,
+    examples=["删除角色猫娘", "移除角色医生"]
+)
+
+function_registry.register(
+    name="clear_all_memory",
+    description="清除所有对话（包括所有角色）",
+    keywords=["清空所有记忆", "删除所有对话", "全部清空", "完全重置"],
+    handler=handle_clear_all_memory,
+    examples=["清空所有记忆", "删除所有对话"]
+)
+
+# ==================== 表情包索要功能 ====================
+async def handle_emoticon_request_ai(user_message: str, event: MessageEvent) -> str:
+    """
+    处理表情包索要请求（通过AI识别）
+    """
+    if not EMOTICON_REQUEST_AVAILABLE:
+        return "❌ 表情包索要系统未启用"
+    
+    user_id = str(event.user_id)
+    
+    try:
+        # 使用表情包索要处理器检测并处理
+        request_info = emoticon_request_handler.detect_emoticon_request(user_message)
+        
+        if not request_info:
+            return "抱歉，我没有理解你想要什么类型的表情包"
+        
+        # 搜索表情包
+        emoticons = await emoticon_request_handler.search_emoticons(
+            request_info['requested_tags'],
+            user_id
+        )
+        
+        if not emoticons:
+            tags_str = "、".join(request_info['requested_tags'])
+            return f"😢 抱歉，我还没有学习到'{tags_str}'相关的表情包"
+        
+        # 保存用户状态
+        emoticon_state_manager.set_user_state(
+            user_id,
+            emoticons,
+            request_info['requested_tags']
+        )
+        
+        # 格式化列表
+        response = emoticon_request_handler.format_emoticon_list(
+            emoticons,
+            request_info['requested_tags']
+        )
+        
+        logger.info(f"🎨 AI识别到表情包索要请求，找到 {len(emoticons)} 个")
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"处理表情包索要请求失败: {e}")
+        return f"❌ 处理表情包索要请求时出错了"
+
+function_registry.register(
+    name="emoticon_request",
+    description="索要表情包，用户想要一个特定情感或场景的表情包图片",
+    keywords=["表情包", "表情", "给我", "要一个", "发一个", "来一个", "发个", "来个", "图", "搞笑", "开心", "难过", "哭", "笑"],
+    handler=handle_emoticon_request_ai,
+    examples=[
+        "给我一个开心的表情包",
+        "要一个难过的表情",
+        "发个搞笑图",
+        "来个哭泣的表情包",
+        "能发个笑的表情吗",
+        "想要个开心的图",
+        "心情不好，来点安慰的表情"
+    ]
+)
+
+# ==================== 无指令化功能集成 ====================
+# 导入并注册所有无指令化功能
+try:
+    from .commandless_integration import COMMANDLESS_FUNCTIONS
+    
+    for func_name, func_info in COMMANDLESS_FUNCTIONS.items():
+        function_registry.register(
+            name=func_name,
+            description=func_info["description"],
+            keywords=func_info["keywords"],
+            handler=func_info["handler"],
+            examples=func_info.get("examples", [])
+        )
+    
+    logger.info(f"✅ 无指令化功能已注册：{len(COMMANDLESS_FUNCTIONS)} 个")
+except ImportError as e:
+    logger.warning(f"⚠️ 无指令化功能模块未加载: {e}")
+
+# ==================== 消息处理器 ====================
+
+# 监听所有消息（优先级设为10，晚于其他插件）
+intelligent_handler = on_message(priority=10, block=False)
+
+@intelligent_handler.handle()
+async def handle_intelligent_message(event: MessageEvent):
+    """智能处理所有消息"""
+    # 群消息：只响应@机器人的消息（避免刷屏）
+    # 私聊消息：全部响应
+    if hasattr(event, 'message_type') and event.message_type == "group":
+        # 检查是否@了机器人
+        # 使用event.self_id来获取机器人ID
+        message_text = str(event.get_message())
+        if f"[CQ:at,qq={event.self_id}]" not in message_text:
+            return
+    
+    user_message = event.get_plaintext().strip()

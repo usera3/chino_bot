@@ -1,0 +1,201 @@
+"""
+图像理解插件
+让Bot能够理解用户发送的图片内容并进行智能回复
+"""
+
+from nonebot import on_message, get_driver
+from nonebot.adapters.onebot.v11 import Bot, MessageEvent, MessageSegment
+from nonebot.log import logger
+from typing import Optional
+
+# 导入多模态AI
+try:
+    from .multimodal_ai import multimodal_ai, MultiModalConfig
+    MULTIMODAL_AVAILABLE = True
+except ImportError:
+    MULTIMODAL_AVAILABLE = False
+    logger.warning("⚠️ 多模态AI模块未加载")
+
+# 导入聊天系统（用于保存图片内容到记忆）
+try:
+    from .chat_plugin_advanced import db_manager
+    CHAT_SYSTEM_AVAILABLE = True
+except ImportError:
+    CHAT_SYSTEM_AVAILABLE = False
+    logger.warning("⚠️ 聊天系统未加载，图片内容将不会保存到记忆")
+
+# ==================== 配置 ====================
+class ImageUnderstandingConfig:
+    """图像理解配置"""
+    ENABLE = True  # 是否启用图像理解
+    SAVE_TO_MEMORY = True  # 是否将图片内容保存到记忆
+    REPLY_TO_IMAGE = True  # 是否回复图片消息
+    
+    # 回复策略
+    REPLY_PROBABILITY = 0.95  # 回复概率（95%回复，5%不回复，更自然）
+    MIN_CONTEXT_FOR_REPLY = 1  # 最少需要多少条上下文才回复
+
+# ==================== 图像理解处理器 ====================
+class ImageUnderstandingHandler:
+    """图像理解处理器"""
+    
+    def __init__(self):
+        self.processed_images = set()  # 防止重复处理同一张图片
+    
+    async def process_image(
+        self, 
+        event: MessageEvent,
+        image_url: str,
+        context: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        处理图片消息
+        
+        Args:
+            event: 消息事件
+            image_url: 图片URL
+            context: 对话上下文
+        
+        Returns:
+            生成的回复（如果有）
+        """
+        if not MULTIMODAL_AVAILABLE or not ImageUnderstandingConfig.ENABLE:
+            return None
+        
+        # 防止重复处理
+        if image_url in self.processed_images:
+            return None
+        self.processed_images.add(image_url)
+        
+        # 限制缓存大小
+        if len(self.processed_images) > 100:
+            self.processed_images.clear()
+        
+        try:
+            user_id = str(event.user_id)
+            
+            # 1. 使用AI理解图片内容
+            logger.info(f"🖼️ 开始理解图片：{image_url[:50]}...")
+            image_analysis = await multimodal_ai.understand_image(image_url, context)
+            
+            if not image_analysis:
+                logger.warning("⚠️ 图片理解失败，使用降级处理")
+                # 降级处理：返回None，不回复（因为看不懂图片内容，不如不说）
+                # 或者返回一个诚实的回复
+                return None  # 直接不回复，避免胡说八道
+            
+            logger.info(f"✅ 图片理解成功：{image_analysis.get('description', '')[:50]}")
+            
+            # 2. 将图片内容保存到聊天记忆
+            if ImageUnderstandingConfig.SAVE_TO_MEMORY and CHAT_SYSTEM_AVAILABLE:
+                try:
+                    # 格式化图片内容为文本
+                    image_memory_text = multimodal_ai.format_image_for_memory(image_analysis)
+                    
+                    # 获取或创建用户
+                    user = await db_manager.get_or_create_user(user_id)
+                    
+                    # 获取当前角色
+                    role_profile = await db_manager.get_role_profile(user_id)
+                    role_id = role_profile.id if role_profile else None
+                    
+                    # 保存到对话记录（使用正确的方法名）
+                    await db_manager.save_message(
+                        user_id=user_id,
+                        role="user",
+                        content=image_memory_text,
+                        importance_score=0.5,  # 中等重要性
+                        emotion="neutral",
+                        role_profile_id=role_id
+                    )
+                    
+                    logger.info(f"💾 图片内容已保存到记忆：{image_memory_text[:50]}")
+                    
+                except Exception as e:
+                    logger.error(f"保存图片内容到记忆失败: {e}")
+            
+            # 3. 决定是否回复
+            if not ImageUnderstandingConfig.REPLY_TO_IMAGE:
+                return None
+            
+            # 使用概率控制回复（更自然）
+            import random
+            if random.random() > ImageUnderstandingConfig.REPLY_PROBABILITY:
+                logger.debug("随机决定不回复此图片（更自然）")
+                return None
+            
+            # 4. 生成智能回复（带有个性）
+            reply = await multimodal_ai.generate_image_response(
+                image_analysis, 
+                context, 
+                user_id=user_id  # 传递user_id以获取情感状态
+            )
+            
+            logger.info(f"💬 生成图片回复：{reply[:50]}")
+            return reply
+            
+        except Exception as e:
+            logger.exception(f"处理图片失败: {e}")
+            return None
+
+# 全局处理器实例
+image_handler = ImageUnderstandingHandler()
+
+# ==================== 消息监听 ====================
+
+# 监听所有消息（优先级98，在表情包学习之前）
+image_listener = on_message(priority=98, block=False)
+
+@image_listener.handle()
+async def handle_image_messages(bot: Bot, event: MessageEvent):
+    """监听并理解图片消息"""
+    
+    if not MULTIMODAL_AVAILABLE or not ImageUnderstandingConfig.ENABLE:
+        return
+    
+    message = event.get_message()
+    
+    # 检测图片消息
+    for segment in message:
+        if segment.type == "image":
+            # 获取图片URL
+            image_url = segment.data.get("url")
+            if not image_url:
+                continue
+            
+            # 获取对话上下文（简单版本）
+            context_text = event.get_plaintext().strip()
+            if context_text:
+                context_text = f"用户同时说：{context_text}"
+            
+            # 处理图片并获取回复
+            reply = await image_handler.process_image(
+                event=event,
+                image_url=image_url,
+                context=context_text
+            )
+            
+            # 如果有回复，发送
+            if reply:
+                try:
+                    await image_listener.send(reply)
+                    logger.info(f"✅ 已回复图片消息")
+                except Exception as e:
+                    logger.error(f"发送图片回复失败: {e}")
+            
+            # 只处理第一张图片
+            break
+
+# ==================== 启动初始化 ====================
+driver = get_driver()
+
+@driver.on_startup
+async def init_image_understanding():
+    """启动时初始化"""
+    if MULTIMODAL_AVAILABLE and ImageUnderstandingConfig.ENABLE:
+        logger.success("🖼️ 图像理解系统已启动")
+        logger.info(f"  - 回复概率: {int(ImageUnderstandingConfig.REPLY_PROBABILITY * 100)}%")
+        logger.info(f"  - 保存到记忆: {'✅' if ImageUnderstandingConfig.SAVE_TO_MEMORY else '❌'}")
+    else:
+        logger.warning("⚠️ 图像理解系统未启用")
+
