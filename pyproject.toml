@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "zhinai-bot-v3"
+version = "0.1.0"
+description = "智能管家式 QQ 机器人 - 深度集成 LangChain"
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+# LangChain 核心
+langchain = "^0.1.0"
+langchain-core = "^0.1.0"
+langchain-community = "^0.0.20"
+# LLM 集成
+langchain-openai = "^0.0.5"
+openai = "^1.0.0"
+# 工具
+pydantic = "^2.0.0"
+python-dotenv = "^1.0.0"
+# 向量数据库（可选，先不装）
+# chromadb = "^0.4.22"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+black = "^23.0.0"
+ipython = "^8.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

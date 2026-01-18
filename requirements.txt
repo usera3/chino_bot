@@ -1,0 +1,33 @@
+# LangChain 核心
+langchain>=0.1.0
+langchain-core>=0.1.0
+langchain-community>=0.0.20
+langchain-experimental>=0.0.50
+
+# LLM 集成
+langchain-openai>=0.0.5
+openai>=1.0.0
+
+# LangGraph
+langgraph>=0.0.20
+
+# 向量数据库
+chromadb>=0.4.22
+
+# Embeddings
+sentence-transformers>=2.2.2
+
+# NoneBot
+nonebot2>=2.0.0
+nonebot-adapter-onebot>=2.0.0
+
+# LangChain 工具依赖
+tavily-python>=0.3.0
+wikipedia>=1.4.0
+
+# 工具
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+
+# 开发工具（可选）
+ipython>=8.0.0
