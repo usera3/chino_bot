@@ -17,6 +17,9 @@ driver.register_adapter(OneBotV11Adapter)
 # 加载 APScheduler 插件（定时任务）
 nonebot.load_plugin("nonebot_plugin_apscheduler")
 
+# 加载 HTMLRender 插件（HTML 渲染）
+nonebot.load_plugin("nonebot_plugin_htmlrender")
+
 # 加载自定义插件
 nonebot.load_plugins("plugins")
 
@@ -28,5 +31,6 @@ if __name__ == "__main__":
     print("🧠 使用 LangChain Agent (Butler)")
     print("💾 启用长期记忆 (VectorStore)")
     print("⏰ 启用定时任务 (APScheduler)")
+    print("🎨 启用 HTML 渲染 (HTMLRender)")
     print("=" * 60)
     nonebot.run()

@@ -72,6 +72,28 @@ async def init_butler():
         traceback.print_exc()
 
 
+# 创建调试处理器（记录所有消息，不阻断）
+debug_handler = on_message(priority=1, block=False)
+
+@debug_handler.handle()
+async def log_all_messages(event: MessageEvent):
+    """记录所有消息用于调试"""
+    chat_type = "群聊" if isinstance(event, GroupMessageEvent) else "私聊"
+    group_id = event.group_id if isinstance(event, GroupMessageEvent) else None
+    user_id = event.user_id
+    text = event.get_plaintext().strip()
+    
+    # 检查是否 @ 了机器人
+    is_tome = False
+    for seg in event.message:
+        if seg.type == "at":
+            at_qq = seg.data.get("qq")
+            if at_qq == str(event.self_id):
+                is_tome = True
+                break
+    
+    print(f"[DEBUG] 收到消息 [{chat_type}] 用户:{user_id} 群:{group_id} @我:{is_tome} 内容:{text[:50]}")
+
 # 创建消息处理器（只响应 @机器人 或私聊）
 chat = on_message(rule=to_me(), priority=10, block=True)
 
@@ -84,8 +106,12 @@ async def handle_message(bot: Bot, event: MessageEvent):
     # 设置 Bot 实例到 QQ 互动工具和定时任务工具
     from tools.qq_interaction_tools import set_bot_instance, set_current_context
     from tools.scheduler_tool import get_scheduler_wrapper
+    from tools.file_transfer_tool import set_bot_instance as set_file_bot_instance
+    from tools.send_file_tool import set_bot_instance as set_send_file_bot_instance
     
     set_bot_instance(bot)
+    set_file_bot_instance(bot)  # 设置到文件传输工具
+    set_send_file_bot_instance(bot)  # 设置到发送文件工具
     get_scheduler_wrapper().set_bot(bot)  # 设置 bot 到定时任务工具
     
     # 检查 Butler 是否初始化
@@ -100,14 +126,15 @@ async def handle_message(bot: Bot, event: MessageEvent):
     chat_type = "群聊" if isinstance(event, GroupMessageEvent) else "私聊"
     group_id = event.group_id if isinstance(event, GroupMessageEvent) else None
     
-    # 提取文本、图片和 @ 信息
+    # 提取文本、图片、文件和 @ 信息
     user_input = event.get_plaintext().strip()
     image_urls = []
+    file_info = []  # 文件信息列表
     mentioned_users = []  # 被 @ 的用户列表
     mentioned_users_info = {}  # 存储被 @ 用户的详细信息 {qq: nickname}
     reply_message_id = None  # 回复的消息 ID
     
-    # 遍历消息段，提取图片、@ 信息和回复信息
+    # 遍历消息段，提取图片、文件、@ 信息和回复信息
     # 使用 original_message 而不是 message，因为 to_me() 会过滤掉 @ 和 reply
     message_to_parse = event.original_message if hasattr(event, 'original_message') else event.message
     for seg in message_to_parse:
@@ -116,6 +143,16 @@ async def handle_message(bot: Bot, event: MessageEvent):
             img_url = seg.data.get("url") or seg.data.get("file")
             if img_url:
                 image_urls.append(img_url)
+        elif seg.type == "file":
+            # 获取文件信息
+            file_name = seg.data.get("file", "未知文件")
+            file_id = seg.data.get("file_id", "")
+            file_size = seg.data.get("file_size", 0)
+            file_info.append({
+                "name": file_name,
+                "id": file_id,
+                "size": file_size
+            })
         elif seg.type == "at":
             # 获取被 @ 的用户 QQ 号
             at_qq = seg.data.get("qq")
@@ -130,7 +167,7 @@ async def handle_message(bot: Bot, event: MessageEvent):
         try:
             # 获取被回复的消息
             replied_msg = await bot.get_msg(message_id=int(reply_message_id))
-            # 解析被回复消息中的图片
+            # 解析被回复消息中的图片和文件
             if replied_msg and "message" in replied_msg:
                 # replied_msg["message"] 是一个字典列表，不是 Message 对象
                 message_list = replied_msg["message"]
@@ -141,6 +178,16 @@ async def handle_message(bot: Bot, event: MessageEvent):
                         img_url = seg_data.get("url") or seg_data.get("file")
                         if img_url:
                             image_urls.append(img_url)
+                    elif seg_type == "file":
+                        # 获取被回复消息中的文件
+                        file_name = seg_data.get("file", "未知文件")
+                        file_id = seg_data.get("file_id", "")
+                        file_size = seg_data.get("file_size", 0)
+                        file_info.append({
+                            "name": file_name,
+                            "id": file_id,
+                            "size": file_size
+                        })
         except Exception as e:
             print(f"⚠️ 获取回复消息失败: {e}")
     
@@ -194,7 +241,7 @@ async def handle_message(bot: Bot, event: MessageEvent):
             tool.current_group_id = str(group_id) if group_id else None
             break
     
-    # 构建增强的用户输入，添加发送者信息
+    # 构建增强的用户输入，添加发送者信息和 QQ 号信息
     context_info = f"[系统提示：发送此消息的用户是"
     
     # 获取发送者昵称
@@ -211,6 +258,18 @@ async def handle_message(bot: Bot, event: MessageEvent):
     context_info += f"{sender_nickname}(QQ:{user_id})"
     if group_id:
         context_info += f"，当前在群{group_id}中"
+    
+    # 添加文件信息
+    if file_info:
+        context_info += f"，发送了{len(file_info)}个文件："
+        for f in file_info:
+            file_size = int(f['size']) if isinstance(f['size'], str) else f['size']
+            file_size_mb = file_size / (1024 * 1024)
+            context_info += f"\n  - {f['name']} ({file_size_mb:.2f} MB, ID: {f['id']})"
+    
+    # 添加机器人自己的 QQ 号信息（用于伪造消息工具）
+    bot_qq = str(bot.self_id) if hasattr(bot, 'self_id') else "2509109290"
+    context_info += f"。你的 QQ 号是 {bot_qq}，用户的 QQ 号是 {user_id}"
     context_info += "]\n\n"
     
     enhanced_user_input = context_info + user_input
@@ -219,8 +278,13 @@ async def handle_message(bot: Bot, event: MessageEvent):
     if not user_input and image_urls:
         user_input = "请分析这张图片"
     
-    # 如果既没有文本也没有图片，忽略
-    if not user_input and not image_urls:
+    # 如果没有文本但有文件，添加默认提示
+    if not user_input and file_info:
+        file_names = ", ".join([f['name'] for f in file_info])
+        user_input = f"请阅读这些文件：{file_names}"
+    
+    # 如果既没有文本也没有图片也没有文件，忽略
+    if not user_input and not image_urls and not file_info:
         return
     
     # 日志
@@ -235,6 +299,11 @@ async def handle_message(bot: Bot, event: MessageEvent):
         print(f"   @ 其他用户: {', '.join([f'{mentioned_users_info.get(u, u)}({u})' for u in other_mentioned_users])}")
     if image_urls:
         print(f"   图片: {len(image_urls)} 张")
+    if file_info:
+        print(f"   文件: {len(file_info)} 个")
+        for f in file_info:
+            file_size = int(f['size']) if isinstance(f['size'], str) else f['size']
+            print(f"     - {f['name']} ({file_size/1024:.2f} KB)")
         for i, url in enumerate(image_urls, 1):
             print(f"      [{i}] {url[:80]}...")
     print(f"{'=' * 60}\n")

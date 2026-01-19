@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "doc-forge": {
+      "command": "npx",
+      "args": ["-y", "@cablate/mcp-doc-forge"],
+      "disabled": false,
+      "autoApprove": ["read_document", "convert_document"]
+    }
+  }
+}
