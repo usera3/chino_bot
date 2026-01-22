@@ -12,7 +12,7 @@ from langchain_core.tools import Tool
 
 
 def get_search_tool():
-    """获取搜索工具（Tavily）"""
+    """获取搜索工具（Tavily）- 禁用 SSL 验证"""
     api_key = os.getenv("TAVILY_API_KEY")
     
     if not api_key:
@@ -20,6 +20,33 @@ def get_search_tool():
         return None
     
     try:
+        # 禁用 SSL 警告
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        
+        # 设置环境变量禁用 SSL 验证
+        os.environ['PYTHONHTTPSVERIFY'] = '0'
+        os.environ['CURL_CA_BUNDLE'] = ''
+        os.environ['REQUESTS_CA_BUNDLE'] = ''
+        
+        # 创建不验证 SSL 的 SSL 上下文
+        import ssl
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        
+        # Monkey patch aiohttp 的 SSL 上下文
+        import aiohttp
+        original_init = aiohttp.ClientSession.__init__
+        
+        def patched_init(self, *args, **kwargs):
+            # 强制使用不验证 SSL 的上下文
+            if 'connector' not in kwargs:
+                kwargs['connector'] = aiohttp.TCPConnector(ssl=False)
+            original_init(self, *args, **kwargs)
+        
+        aiohttp.ClientSession.__init__ = patched_init
+        
         search = TavilySearchResults(
             api_key=api_key,
             max_results=3,
@@ -41,10 +68,13 @@ def get_search_tool():
 输入：搜索关键词（字符串）
 输出：搜索结果摘要"""
         
+        print("✅ Tavily 搜索工具已启用（SSL 验证已禁用 - aiohttp patched）")
         return search
     
     except Exception as e:
         print(f"⚠️ Tavily 搜索工具初始化失败: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
