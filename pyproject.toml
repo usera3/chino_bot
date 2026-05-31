@@ -1,9 +1,11 @@
 [tool.poetry]
-name = "zhinai-bot-v3"
+name = "chino-bot"
 version = "0.1.0"
-description = "智能管家式 QQ 机器人 - 深度集成 LangChain"
-authors = ["Your Name <you@example.com>"]
+description = "Agentic QQ assistant built with LangChain and NoneBot2"
+authors = ["usera3"]
 readme = "README.md"
+license = "MIT"
+repository = "https://github.com/usera3/chino_bot"
 
 [tool.poetry.dependencies]
 python = "^3.10"

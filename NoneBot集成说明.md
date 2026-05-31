@@ -181,7 +181,7 @@ LangChain Agent
 HOST=127.0.0.1
 PORT=8081                    # 端口（避免与 new-bot 冲突）
 LOG_LEVEL=INFO
-SUPERUSERS=["1143242311"]    # 超级用户
+SUPERUSERS=["123456789"]    # 超级用户
 
 # DeepSeek API
 DEEPSEEK_API_KEY=sk-xxx      # API Key
@@ -189,7 +189,7 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com
 
 # QQ 邮箱（用于邮件工具）
 QQ_EMAIL_SENDER=xxx@qq.com
-QQ_EMAIL_PASSWORD=xxx
+QQ_EMAIL_PASSWORD=your_qq_smtp_authorization_code
 ```
 
 ### 插件配置
@@ -241,7 +241,7 @@ tail -f logs/bot.log
 
 ============================================================
 📨 收到消息 [私聊]
-   用户: 1143242311
+   用户: 123456789
    内容: 你好
 ============================================================
 

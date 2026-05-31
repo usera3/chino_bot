@@ -16,7 +16,7 @@ async def test_upload():
     
     try:
         # 获取 Bot 实例
-        bot = get_bot("2509109290")
+        bot = get_bot("1000000000")
         print(f"✅ 获取 Bot 实例成功: {bot}")
         
         # 创建测试文件
@@ -132,7 +132,7 @@ async def test_get_group_files():
     print("=" * 60)
     
     try:
-        bot = get_bot("2509109290")
+        bot = get_bot("1000000000")
         group_id = 878812866
         
         print(f"🧪 获取群 {group_id} 的文件列表")

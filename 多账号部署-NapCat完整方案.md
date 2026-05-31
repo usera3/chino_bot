@@ -8,7 +8,7 @@
 - **集成方式**: NapCat 作为 QQ.app 的 Shell 插件运行
 - **配置目录**: `~/Library/Containers/com.tencent.qq/Data/Library/Application Support/QQ/NapCat/`
 - **连接方式**: WebSocket 反向连接 (ws://127.0.0.1:8080/onebot/v11/)
-- **当前账号**: 2509109290
+- **当前账号**: 1000000000
 
 ### 架构图
 ```
@@ -16,7 +16,7 @@
 │         QQ.app (macOS)                  │
 │  ┌───────────────────────────────────┐  │
 │  │   NapCat Shell (插件模式)         │  │
-│  │   - 账号: 2509109290              │  │
+│  │   - 账号: 1000000000              │  │
 │  │   - WebUI: http://127.0.0.1:6099  │  │
 │  │   - 反向WS: ws://127.0.0.1:8080   │  │
 │  └───────────────────────────────────┘  │
@@ -93,13 +93,13 @@ mkdir -p bots/bot1 bots/bot2 bots/bot3
 
 为每个 Bot 创建独立的 `.env` 文件：
 
-**bots/bot1/.env** (现有账号 2509109290)
+**bots/bot1/.env** (现有账号 1000000000)
 ```env
 # NoneBot 配置
 HOST=127.0.0.1
 PORT=8080
 LOG_LEVEL=INFO
-SUPERUSERS=["1143242311"]
+SUPERUSERS=["123456789"]
 NICKNAME=["智乃", "chino"]
 COMMAND_START=["/", ""]
 COMMAND_SEP=["."]
@@ -109,20 +109,20 @@ ONEBOT_ACCESS_TOKEN=""
 
 # Bot 标识
 BOT_NAME=bot1
-BOT_QQ=2509109290
+BOT_QQ=1000000000
 
 # DeepSeek API 配置
-DEEPSEEK_API_KEY=sk-88d32ba8d6b644da8b00647200eafa95
+DEEPSEEK_API_KEY=sk-your-deepseek-api-key
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 
 # QQ 邮箱 SMTP 配置
-QQ_EMAIL_SENDER=2509109290@qq.com
-QQ_EMAIL_PASSWORD=your_password_here
+QQ_EMAIL_SENDER=1000000000@qq.com
+QQ_EMAIL_PASSWORD=your_qq_smtp_authorization_code
 
 # 其他 API
-TAVILY_API_KEY=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
-AMAP_API_KEY=f295c899197cc6a1f8d02cde8a81cc7a
-DASHSCOPE_API_KEY=sk-105724d3e4bb4f6ea354426dbecf3137
+TAVILY_API_KEY=tvly-your-tavily-api-key
+AMAP_API_KEY=amap-your-api-key
+DASHSCOPE_API_KEY=sk-your-dashscope-api-key
 ```
 
 **bots/bot2/.env** (新账号)
@@ -130,7 +130,7 @@ DASHSCOPE_API_KEY=sk-105724d3e4bb4f6ea354426dbecf3137
 HOST=127.0.0.1
 PORT=8081
 LOG_LEVEL=INFO
-SUPERUSERS=["1143242311"]
+SUPERUSERS=["123456789"]
 NICKNAME=["智乃2", "chino2"]
 COMMAND_START=["/", ""]
 COMMAND_SEP=["."]
@@ -141,15 +141,15 @@ BOT_NAME=bot2
 BOT_QQ=3456789012
 
 # 使用相同的 API 配置
-DEEPSEEK_API_KEY=sk-88d32ba8d6b644da8b00647200eafa95
+DEEPSEEK_API_KEY=sk-your-deepseek-api-key
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 
 QQ_EMAIL_SENDER=3456789012@qq.com
-QQ_EMAIL_PASSWORD=your_password_here
+QQ_EMAIL_PASSWORD=your_qq_smtp_authorization_code
 
-TAVILY_API_KEY=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
-AMAP_API_KEY=f295c899197cc6a1f8d02cde8a81cc7a
-DASHSCOPE_API_KEY=sk-105724d3e4bb4f6ea354426dbecf3137
+TAVILY_API_KEY=tvly-your-tavily-api-key
+AMAP_API_KEY=amap-your-api-key
+DASHSCOPE_API_KEY=sk-your-dashscope-api-key
 ```
 
 **bots/bot3/.env** (新账号)
@@ -165,8 +165,8 @@ BOT_QQ=7890123456
 
 对于每个 QQ 账号，需要配置 NapCat 的 OneBot11 配置文件。
 
-**账号 1 (2509109290) - 已配置**
-配置文件位置: `~/Library/Containers/com.tencent.qq/Data/Library/Application Support/QQ/NapCat/config/onebot11_2509109290.json`
+**账号 1 (1000000000) - 已配置**
+配置文件位置: `~/Library/Containers/com.tencent.qq/Data/Library/Application Support/QQ/NapCat/config/onebot11_1000000000.json`
 
 当前配置（已正确）：
 ```json
@@ -243,7 +243,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-PROJECT_DIR="/Users/mozi100/PycharmProjects/chino_bot"
+PROJECT_DIR="/path/to/chino_bot"
 BOT_BASE_DIR="${PROJECT_DIR}/zhinai-bot-v3"
 VENV_DIR="${PROJECT_DIR}/.venv"
 LOG_DIR="${PROJECT_DIR}/logs"
@@ -257,7 +257,7 @@ echo -e "${GREEN}================================${NC}"
 
 # Bot 配置数组 (bot_name:port:qq_number)
 declare -A BOTS=(
-    ["bot1"]="8080:2509109290"
+    ["bot1"]="8080:1000000000"
     ["bot2"]="8081:3456789012"
     ["bot3"]="8082:7890123456"
 )
@@ -313,7 +313,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
 
-PROJECT_DIR="/Users/mozi100/PycharmProjects/chino_bot"
+PROJECT_DIR="/path/to/chino_bot"
 PID_FILE="${PROJECT_DIR}/.bot_pids"
 
 echo -e "${GREEN}停止所有机器人...${NC}"
@@ -343,7 +343,7 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-PROJECT_DIR="/Users/mozi100/PycharmProjects/chino_bot"
+PROJECT_DIR="/path/to/chino_bot"
 PID_FILE="${PROJECT_DIR}/.bot_pids"
 
 echo "多账号机器人状态："
@@ -404,10 +404,10 @@ CREATE TABLE knowledge (
 
 ### 单机多用户方案（推荐用于测试）
 
-1. **启动主账号 (2509109290)**
+1. **启动主账号 (1000000000)**
 ```bash
 # 当前用户
-cd /Users/mozi100/PycharmProjects/chino_bot
+cd /path/to/chino_bot
 bash zhinai-bot-v3/start_bot.sh
 ```
 
@@ -426,7 +426,7 @@ bash zhinai-bot-v3/start_bot.sh
 # Bot 1
 docker run -d --name napcat-bot1 \
   -p 8080:8080 \
-  -e QQ_ACCOUNT=2509109290 \
+  -e QQ_ACCOUNT=1000000000 \
   napneko/napcat:latest
 
 # Bot 2
@@ -449,7 +449,7 @@ bash start_multi_bots.sh
 
 ### 查看 NapCat WebUI
 每个 NapCat 实例都有独立的 WebUI：
-- Bot1: http://127.0.0.1:6099/webui?token=4ea76dee04cd
+- Bot1: http://127.0.0.1:6099/webui?token=your-napcat-webui-token
 - Bot2: http://127.0.0.1:6100/webui?token=xxx (需要配置不同端口)
 - Bot3: http://127.0.0.1:6101/webui?token=xxx
 

@@ -1,22 +1,29 @@
 #!/bin/bash
 
 echo "================================"
-echo "   停止 zhinai-bot-v3"
+echo "   停止 Chino Bot"
 echo "================================"
 
+PROJECT_DIR="${CHINO_PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+PID_FILE="${PROJECT_DIR}/.bot_pids"
+
 # 检查 PID 文件
-if [ ! -f ".bot_pid" ]; then
+if [ ! -f "${PID_FILE}" ]; then
     echo "⚠️  未找到运行中的机器人"
     exit 0
 fi
 
 # 读取 PID
-PID=$(cat .bot_pid)
+PID=$(grep "^BOT_PID=" "${PID_FILE}" | cut -d'=' -f2)
+if [ -z "${PID}" ]; then
+    echo "⚠️  PID 文件中未找到 BOT_PID"
+    exit 0
+fi
 
 # 检查进程是否存在
 if ! ps -p $PID > /dev/null 2>&1; then
     echo "⚠️  进程不存在 (PID: $PID)"
-    rm .bot_pid
+    rm "${PID_FILE}"
     exit 0
 fi
 
@@ -35,7 +42,7 @@ if ps -p $PID > /dev/null 2>&1; then
 fi
 
 # 删除 PID 文件
-rm .bot_pid
+rm "${PID_FILE}"
 
 echo "✅ NoneBot 已停止"
 echo ""

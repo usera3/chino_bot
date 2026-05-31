@@ -19,7 +19,7 @@ async def test_forward():
         bot: Bot = get_bot()
         print(f"✓ 获取到 Bot: {bot.self_id}")
         
-        user_qq = "1446437177"
+        user_qq = "123456789"
         bot_qq = str(bot.self_id)
         
         # 构建消息

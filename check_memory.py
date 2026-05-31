@@ -16,7 +16,7 @@ def main():
     print(f"   存储路径: {stats['persist_directory']}")
     
     # 获取所有记忆（通过搜索空字符串）
-    print(f"\n🔍 查询用户 1446437177 的所有记忆...")
+    print(f"\n🔍 查询用户 123456789 的所有记忆...")
     
     # 尝试搜索一些常见关键词
     keywords = ["邮箱", "email", "吃饭", "提醒", ""]
@@ -28,7 +28,7 @@ def main():
         
         results = vector_store.search_similar_conversations(
             query=keyword if keyword else "用户",
-            user_id="1446437177",
+            user_id="123456789",
             k=10  # 获取最多10条
         )
         

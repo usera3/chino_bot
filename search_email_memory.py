@@ -9,7 +9,7 @@ def main():
     
     # 搜索包含邮箱关键词的记忆
     queries = [
-        "1446437177@qq.com",
+        "123456789@qq.com",
         "qq号加qq邮箱后缀",
         "我的邮箱就是我qq号",
         "地址就是我qq号加上qq邮箱的后缀"
@@ -22,7 +22,7 @@ def main():
         
         results = vector_store.search_similar_conversations(
             query=query,
-            user_id="1446437177",
+            user_id="123456789",
             k=5
         )
         

@@ -225,7 +225,7 @@ async def handle_message(bot: Bot, event: MessageEvent):
     
     # 设置当前上下文（供工具使用），包含被 @ 的用户
     # 过滤掉机器人自己
-    bot_id = str(bot.self_id) if hasattr(bot, 'self_id') else "2509109290"
+    bot_id = str(bot.self_id) if hasattr(bot, 'self_id') else "1000000000"
     other_mentioned_users = [u for u in mentioned_users if u != bot_id]
     
     set_current_context(
@@ -268,7 +268,7 @@ async def handle_message(bot: Bot, event: MessageEvent):
             context_info += f"\n  - {f['name']} ({file_size_mb:.2f} MB, ID: {f['id']})"
     
     # 添加机器人自己的 QQ 号信息（用于伪造消息工具）
-    bot_qq = str(bot.self_id) if hasattr(bot, 'self_id') else "2509109290"
+    bot_qq = str(bot.self_id) if hasattr(bot, 'self_id') else "1000000000"
     context_info += f"。你的 QQ 号是 {bot_qq}，用户的 QQ 号是 {user_id}"
     context_info += "]\n\n"
     

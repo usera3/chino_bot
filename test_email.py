@@ -29,7 +29,7 @@ def test_email():
     # 测试发送邮件
     print("\n发送测试邮件...")
     result = tool._run(
-        receiver_email="1446437177@qq.com",  # 替换为你的测试邮箱
+        receiver_email="123456789@qq.com",  # 替换为你的测试邮箱
         subject="来自 zhinai-bot-v3 的测试邮件",
         content="""你好！
 

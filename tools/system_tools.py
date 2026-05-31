@@ -7,6 +7,19 @@ from typing import Optional
 import os
 
 
+def _log_file_path(log_type: str) -> tuple[str, str] | None:
+    """Resolve a log file path from environment-driven configuration."""
+    log_dir = os.getenv(
+        "CHINO_LOG_DIR",
+        os.path.join(os.getenv("CHINO_PROJECT_ROOT", os.getcwd()), "logs"),
+    )
+    if log_type == "qq":
+        return os.path.join(log_dir, "qq.log"), "NapCat"
+    if log_type == "bot":
+        return os.path.join(log_dir, "bot.log"), "机器人"
+    return None
+
+
 # ==================== 查看日志工具 ====================
 class ViewLogsInput(BaseModel):
     """查看日志输入"""
@@ -55,14 +68,10 @@ class ViewLogsTool(BaseTool):
         """执行工具"""
         try:
             # 确定日志文件路径
-            if log_type == "qq":
-                log_file = "/Users/mozi100/PycharmProjects/chino_bot/logs/qq.log"
-                log_name = "NapCat"
-            elif log_type == "bot":
-                log_file = "/Users/mozi100/PycharmProjects/chino_bot/logs/bot.log"
-                log_name = "机器人"
-            else:
+            resolved = _log_file_path(log_type)
+            if not resolved:
                 return f"❌ 不支持的日志类型：{log_type}（支持：qq, bot）"
+            log_file, log_name = resolved
             
             # 检查文件是否存在
             if not os.path.exists(log_file):

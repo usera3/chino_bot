@@ -53,7 +53,7 @@ nano .env  # 或使用你喜欢的编辑器
 ```bash
 # QQ 机器人配置
 QQ_ACCOUNT=123456789
-QQ_PASSWORD=your_password
+QQ_PASSWORD=your_qq_password_or_use_qr_login
 
 # LLM 配置（至少配置一个）
 DASHSCOPE_API_KEY=sk-xxx  # 通义千问

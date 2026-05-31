@@ -174,7 +174,7 @@ all_tools = ... + analysis_tools
 
 📍 位置信息:
   - 类型: class
-  - 文件: /Users/mozi100/PycharmProjects/chino_bot/zhinai-bot-v3/core/butler.py
+  - 文件: /path/to/chino_bot/core/butler.py
   - 行号: 11-722
 
 📝 文档:

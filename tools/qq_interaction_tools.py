@@ -75,7 +75,7 @@ class SendLikeTool(BaseTool):
             
             # 优先使用被 @ 的用户（排除机器人自己）
             mentioned_users = context.get("mentioned_users", [])
-            bot_id = str(bot.self_id) if hasattr(bot, 'self_id') else "2509109290"
+            bot_id = str(bot.self_id) if hasattr(bot, 'self_id') else "1000000000"
             
             # 过滤掉机器人自己
             target_users = [u for u in mentioned_users if u != bot_id]
@@ -130,7 +130,7 @@ class SendLikeTool(BaseTool):
             
             # 优先使用被 @ 的用户（排除机器人自己）
             mentioned_users = context.get("mentioned_users", [])
-            bot_id = str(bot.self_id) if hasattr(bot, 'self_id') else "2509109290"
+            bot_id = str(bot.self_id) if hasattr(bot, 'self_id') else "1000000000"
             
             # 过滤掉机器人自己
             target_users = [u for u in mentioned_users if u != bot_id]

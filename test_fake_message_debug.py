@@ -16,7 +16,7 @@ async def test_forward_message():
         print(f"机器人 QQ: {bot_qq}")
         
         # 测试数据
-        user_qq = "1446437177"  # 用户 QQ
+        user_qq = "123456789"  # 用户 QQ
         
         # 构建消息
         messages = [

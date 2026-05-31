@@ -11,13 +11,19 @@ import json
 # ==================== 配置 ====================
 
 # 项目根目录
-PROJECT_ROOT = os.path.realpath("/Users/mozi100/PycharmProjects/chino_bot/zhinai-bot-v3")
+PROJECT_ROOT = os.path.realpath(
+    os.getenv("CHINO_PROJECT_ROOT", os.getcwd())
+)
 
 # 允许访问的路径
 ALLOWED_PATHS = [PROJECT_ROOT]
 
 # 管理员用户（QQ 号）
-ADMIN_USERS = ["1446437177"]
+ADMIN_USERS = [
+    user_id.strip()
+    for user_id in os.getenv("CHINO_ADMIN_USERS", "").split(",")
+    if user_id.strip()
+]
 
 # 安全命令白名单
 SAFE_COMMANDS = {

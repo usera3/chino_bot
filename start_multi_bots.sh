@@ -30,7 +30,7 @@ if [ ! -d "bots" ]; then
     echo "3. 配置不同的端口和 QQ 号"
     echo ""
     echo "示例："
-    echo "  bots/bot1/.env  -> PORT=8080, BOT_QQ=2509109290"
+    echo "  bots/bot1/.env  -> PORT=8080, BOT_QQ=1000000000"
     echo "  bots/bot2/.env  -> PORT=8081, BOT_QQ=3456789012"
     exit 0
 fi

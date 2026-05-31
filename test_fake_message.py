@@ -16,8 +16,8 @@ async def test_fake_message():
     
     # 测试占位符替换
     messages = "{{USER_QQ}}说你好|{{BOT_QQ}}说你也好|{{USER_QQ}}说今天天气不错|{{BOT_QQ}}说是啊"
-    user_qq = "1446437177"
-    bot_qq = "2509109290"
+    user_qq = "123456789"
+    bot_qq = "1000000000"
     
     print(f"\n原始消息：")
     print(messages)

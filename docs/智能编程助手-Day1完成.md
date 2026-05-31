@@ -33,7 +33,7 @@
 #### 路径验证
 ```python
 # 只允许访问项目目录
-PROJECT_ROOT = "/Users/mozi100/PycharmProjects/chino_bot/zhinai-bot-v3"
+PROJECT_ROOT = "/path/to/chino_bot"
 
 # 自动验证路径
 safe_path = get_safe_path("tools/basic_tools.py")  # ✅ 允许
@@ -55,7 +55,7 @@ DANGEROUS_COMMANDS = {
 
 #### 权限控制
 ```python
-ADMIN_USERS = ["1446437177"]  # 管理员 QQ 号
+ADMIN_USERS = ["123456789"]  # 管理员 QQ 号
 
 # 需要确认的操作
 REQUIRE_CONFIRMATION = {
@@ -69,7 +69,7 @@ REQUIRE_CONFIRMATION = {
 # 所有操作都会记录到 logs/audit.log
 {
     "timestamp": "2026-01-19T17:10:00",
-    "user_id": "1446437177",
+    "user_id": "123456789",
     "operation": "read_file",
     "details": {"file_path": "bot.py"},
     "success": true
@@ -109,7 +109,7 @@ REQUIRE_CONFIRMATION = {
 from core.project_manager import project_manager
 
 # 读取文件
-content = project_manager.read_file("bot.py", user_id="1446437177")
+content = project_manager.read_file("bot.py", user_id="123456789")
 print(content)
 ```
 
@@ -119,7 +119,7 @@ print(content)
 files = project_manager.list_files(
     directory="tools",
     pattern="*.py",
-    user_id="1446437177"
+    user_id="123456789"
 )
 print(files)
 # ['tools/__init__.py', 'tools/basic_tools.py', ...]
@@ -131,7 +131,7 @@ print(files)
 results = project_manager.search_in_files(
     pattern="Butler",
     file_pattern="*.py",
-    user_id="1446437177"
+    user_id="123456789"
 )
 for result in results:
     print(f"{result['file']}:{result['line']} - {result['content']}")
@@ -143,7 +143,7 @@ for result in results:
 tree = project_manager.get_directory_tree(
     directory="tools",
     max_depth=2,
-    user_id="1446437177"
+    user_id="123456789"
 )
 print(tree)
 ```

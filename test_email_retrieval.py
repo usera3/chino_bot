@@ -13,7 +13,7 @@ def main():
     
     # 模拟用户问"你还记得我的邮箱吗"
     query = "你还记得我的邮箱吗"
-    user_id = "1446437177"
+    user_id = "123456789"
     
     print(f"\n用户问题: {query}")
     print(f"用户ID: {user_id}")
@@ -29,7 +29,7 @@ def main():
     print("\n" + "="*60)
     
     # 检查是否包含邮箱信息
-    if "1446437177@qq.com" in context or "qq号加" in context or "邮箱" in context:
+    if "123456789@qq.com" in context or "qq号加" in context or "邮箱" in context:
         print("✅ 成功检索到邮箱相关信息")
     else:
         print("❌ 未检索到邮箱相关信息")

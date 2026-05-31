@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ===========================================
-# zhinai-bot-v3 一键启动脚本
+# Chino Bot 一键启动脚本
 # 功能：同时启动 NoneBot 和 NapCat(QQ)
 # 支持黑屏后继续运行
 # ===========================================
@@ -13,17 +13,17 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # 项目路径
-PROJECT_DIR="/Users/mozi100/PycharmProjects/chino_bot"
-BOT_DIR="${PROJECT_DIR}/zhinai-bot-v3"
+PROJECT_DIR="${CHINO_PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+BOT_DIR="${PROJECT_DIR}"
 VENV_DIR="${PROJECT_DIR}/.venv"
-LOG_DIR="${PROJECT_DIR}/logs"
+LOG_DIR="${CHINO_LOG_DIR:-${PROJECT_DIR}/logs}"
 PID_FILE="${PROJECT_DIR}/.bot_pids"
 
 # 创建日志目录
 mkdir -p "${LOG_DIR}"
 
 echo -e "${GREEN}================================${NC}"
-echo -e "${GREEN}   zhinai-bot-v3 启动中...${NC}"
+echo -e "${GREEN}   Chino Bot 启动中...${NC}"
 echo -e "${GREEN}================================${NC}"
 
 # 检查是否已经在运行
@@ -43,8 +43,15 @@ PYTHON_BIN="${VENV_DIR}/bin/python"
 # 切换到 bot 目录
 cd "${BOT_DIR}"
 
-# 使用 caffeinate 防止系统休眠，并在 arm64 架构下运行
-nohup arch -arm64 caffeinate -i "${PYTHON_BIN}" bot.py > "${LOG_DIR}/bot.log" 2>&1 &
+if [ ! -x "${PYTHON_BIN}" ]; then
+    PYTHON_BIN="${PYTHON_BIN:-python}"
+fi
+
+if command -v caffeinate >/dev/null 2>&1; then
+    nohup caffeinate -i "${PYTHON_BIN}" bot.py > "${LOG_DIR}/bot.log" 2>&1 &
+else
+    nohup "${PYTHON_BIN}" bot.py > "${LOG_DIR}/bot.log" 2>&1 &
+fi
 BOT_PID=$!
 
 # 等待 bot 启动
@@ -100,7 +107,7 @@ echo -e "${GREEN}================================${NC}"
 echo -e "${GREEN}   启动完成！${NC}"
 echo -e "${GREEN}================================${NC}"
 echo ""
-echo -e "🤖 zhinai-bot-v3 特性："
+echo -e "🤖 Chino Bot 特性："
 echo -e "   ✅ LangChain Agent (Butler)"
 echo -e "   ✅ 长期记忆 (VectorStore)"
 echo -e "   ✅ 智能工具调用"

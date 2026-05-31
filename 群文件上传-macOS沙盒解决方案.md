@@ -6,8 +6,8 @@
 经过深入调研，发现群文件上传失败的真正原因是 **macOS 沙盒机制**：
 
 ```
-Error: EPERM: operation not permitted, copyfile 
-'/Users/mozi100/PycharmProjects/chino_bot/zhinai-bot-v3/test_document.docx' -> 
+Error: EPERM: operation not permitted, copyfile
+'/path/to/chino_bot/test_document.docx' ->
 '/Users/mozi100/Library/Containers/com.tencent.qq/Data/.config/QQ/NapCat/temp/...'
 ```
 

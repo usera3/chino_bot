@@ -5,7 +5,7 @@
 在测试 Word 文档创建功能时，遇到 lxml 库加载失败的错误：
 
 ```
-❌ 创建 Word 失败：dlopen(/Users/mozi100/PycharmProjects/chino_bot/.venv/lib/python3.13/site-packages/lxml...) failed
+❌ 创建 Word 失败：dlopen(/path/to/chino_bot/.venv/lib/python3.13/site-packages/lxml...) failed
 ```
 
 ## 🔍 问题原因

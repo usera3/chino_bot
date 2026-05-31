@@ -17,12 +17,14 @@ echo ""
 # 输入 Bot 信息
 read -p "Bot 名称 (如 bot1, bot2): " bot_name
 read -p "QQ 号: " qq_number
+read -p "管理员 QQ 号 (默认使用 Bot QQ): " admin_qq
 read -p "NoneBot 端口 (默认 8080): " port
 read -p "NapCat 端口 (默认 3000): " napcat_port
 
 # 设置默认值
 port=${port:-8080}
 napcat_port=${napcat_port:-3000}
+admin_qq=${admin_qq:-$qq_number}
 
 # 创建目录
 bot_dir="bots/$bot_name"
@@ -43,7 +45,7 @@ NAPCAT_PORT=$napcat_port
 
 # NoneBot 配置
 LOG_LEVEL=INFO
-SUPERUSERS=["1143242311"]
+SUPERUSERS=["$admin_qq"]
 NICKNAME=["智乃", "chino"]
 COMMAND_START=["/", ""]
 COMMAND_SEP=["."]
@@ -52,17 +54,21 @@ COMMAND_SEP=["."]
 ONEBOT_ACCESS_TOKEN=""
 
 # DeepSeek API 配置
-DEEPSEEK_API_KEY=sk-88d32ba8d6b644da8b00647200eafa95
+DEEPSEEK_API_KEY=
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 
 # QQ 邮箱 SMTP 配置
 QQ_EMAIL_SENDER=${qq_number}@qq.com
-QQ_EMAIL_PASSWORD=请填写授权码
+QQ_EMAIL_PASSWORD=
 
 # 其他 API（可选）
-TAVILY_API_KEY=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
-AMAP_API_KEY=f295c899197cc6a1f8d02cde8a81cc7a
-DASHSCOPE_API_KEY=sk-105724d3e4bb4f6ea354426dbecf3137
+TAVILY_API_KEY=
+AMAP_API_KEY=
+DASHSCOPE_API_KEY=
+
+# 安全边界
+CHINO_PROJECT_ROOT=$SCRIPT_DIR
+CHINO_ADMIN_USERS=$admin_qq
 EOF
 
 echo -e "${GREEN}✓ 配置文件已创建: $bot_dir/.env${NC}"
@@ -73,11 +79,12 @@ echo "================================"
 echo ""
 echo "📝 下一步："
 echo "1. 编辑 $bot_dir/.env 文件"
-echo "2. 配置 QQ 邮箱授权码"
-echo "3. 配置 NapCat (如需要)"
+echo "2. 填写需要使用的 API Key 和 QQ 邮箱授权码"
+echo "3. 配置 NapCat / OneBot 反向 WebSocket"
 echo "4. 运行: bash start_multi_bots.sh"
 echo ""
 echo -e "${YELLOW}⚠️  注意：${NC}"
 echo "- 确保端口 $port 未被占用"
 echo "- 确保 QQ 号 $qq_number 已登录 NapCat"
+echo "- 不要提交 bots/$bot_name/.env 或任何私密日志"
 echo ""
