@@ -1,11 +1,9 @@
 [tool.poetry]
-name = "chino-bot"
+name = "zhinai-bot-v3"
 version = "0.1.0"
-description = "Agentic QQ assistant built with LangChain and NoneBot2"
-authors = ["usera3"]
+description = "智能管家式 QQ 机器人 - 深度集成 LangChain"
+authors = ["Your Name <you@example.com>"]
 readme = "README.md"
-license = "MIT"
-repository = "https://github.com/usera3/chino_bot"
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -19,6 +17,7 @@ openai = "^1.0.0"
 # 工具
 pydantic = "^2.0.0"
 python-dotenv = "^1.0.0"
+playwright = "^1.58.0"
 # 向量数据库（可选，先不装）
 # chromadb = "^0.4.22"
 

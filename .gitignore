@@ -156,3 +156,13 @@ pids/
 *.wav
 *.mp3
 voice_temp/
+
+# Keep curated v5 voice assets under version control.
+!voice/**/*.wav
+!voice/**/*.mp3
+
+# Large local model weights should be downloaded, not committed.
+voice/qwen3-tts-apple-silicon/models/Qwen3-TTS-12Hz-1.7B-Base-8bit/model.safetensors
+voice/qwen3-tts-apple-silicon/models/Qwen3-TTS-12Hz-1.7B-Base-8bit/speech_tokenizer/model.safetensors
+voice/qwen3-tts-apple-silicon/models/**/.cache/
+openclaw/**/.npm-cache/

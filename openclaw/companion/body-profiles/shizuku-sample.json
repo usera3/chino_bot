@@ -1,0 +1,33 @@
+{
+  "name": "Shizuku Sample",
+  "slug": "shizuku-sample",
+  "description": "Temporary local sample body used to validate the shell pipeline.",
+  "visualRole": "temporary-sample",
+  "avatarFilename": "shizuku.png",
+  "modelInfo": {
+    "name": "OpenClaw Companion (Shizuku Sample Body)",
+    "description": "Bridge-driven local shell for OpenClaw using the bundled Shizuku sample Live2D body",
+    "url": "/live2d/shizuku/runtime/shizuku.model3.json",
+    "kScale": 0.45,
+    "initialXshift": 0,
+    "initialYshift": 0,
+    "idleMotionGroupName": "Idle",
+    "defaultEmotion": "neutral",
+    "emotionMap": {
+      "calm": "neutral",
+      "curious": "surprised",
+      "focused": "serious",
+      "pleased": "happy",
+      "concerned": "sad",
+      "tired": "neutral"
+    },
+    "pointerInteractive": true,
+    "scrollToResize": true,
+    "initialScale": 0.9
+  },
+  "static": {
+    "live2dDir": "/Users/mozi100/PycharmProjects/openclaw/companion-assets/live2d",
+    "avatarsDir": "/Users/mozi100/PycharmProjects/openclaw/companion-assets/avatars",
+    "backgroundsDir": ""
+  }
+}

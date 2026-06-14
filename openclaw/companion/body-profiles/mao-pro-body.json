@@ -1,0 +1,100 @@
+{
+  "name": "Mao Pro Body",
+  "slug": "mao-pro-body",
+  "description": "Cute official sample body imported from the Open-LLM-VTuber GitHub repository",
+  "visualRole": "imported-body",
+  "avatarFilename": "mao-pro-body.png",
+  "modelInfo": {
+      "name": "Mao Pro Body",
+      "description": "Cute official sample body imported from the Open-LLM-VTuber GitHub repository",
+      "url": "/live2d/mao-pro-body/runtime/mao_pro.model3.json",
+      "fallbackImageUrl": "/live2d/mao-pro-body/runtime/mao_pro.4096/texture_00.png",
+      "fallbackHeight": 120,
+      "fallbackLeft": 8,
+      "fallbackTopPercent": 50,
+      "kScale": 0.24,
+      "initialXshift": 0,
+      "initialYshift": 0,
+    "idleMotionGroupName": "Idle",
+    "defaultEmotion": "neutral",
+    "emotionMap": {
+      "calm": "neutral",
+      "curious": "surprised",
+      "focused": "serious",
+      "pleased": "happy",
+      "concerned": "sad",
+      "tired": "neutral"
+    },
+    "pointerInteractive": true,
+    "tapMotions": {
+      "default": {
+        "": 1
+      }
+    },
+    "scrollToResize": true,
+      "initialScale": 0.48
+  },
+  "static": {
+    "live2dDir": "/Users/mozi100/PycharmProjects/openclaw/companion-assets/live2d",
+    "avatarsDir": "/Users/mozi100/PycharmProjects/openclaw/companion-assets/avatars",
+    "backgroundsDir": ""
+  },
+  "motionMap": {
+    "idle-soft": [
+      {
+        "group": "Idle",
+        "random": true,
+        "priority": 1
+      }
+    ],
+    "lean-in-soft": [
+      {
+        "group": "",
+        "index": 0,
+        "priority": 3
+      }
+    ],
+    "still-attentive": [
+      {
+        "group": "Idle",
+        "random": true,
+        "priority": 2
+      }
+    ],
+    "gentle-nod": [
+      {
+        "group": "",
+        "index": 1,
+        "priority": 3
+      }
+    ],
+    "guarded-soft": [
+      {
+        "group": "",
+        "index": 2,
+        "priority": 3
+      }
+    ],
+    "slow-blink": [
+      {
+        "group": "",
+        "index": 4,
+        "priority": 2
+      }
+    ],
+    "wake-soft": [
+      {
+        "group": "",
+        "index": 3,
+        "priority": 4
+      }
+    ],
+    "wave-soft": [
+      {
+        "group": "",
+        "index": 5,
+        "priority": 4
+      }
+    ]
+  }
+}

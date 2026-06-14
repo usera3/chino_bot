@@ -1,0 +1,165 @@
+{
+  "version": 1,
+  "updated_at": "2026-04-07",
+  "fusion_principle": {
+    "chat_brain": "openclaw",
+    "memory_truth_source": "openclaw",
+    "preferred_qq_execution_backend": "chinobot",
+    "final_reply_owner": "openclaw"
+  },
+  "sources": {
+    "openclaw": {
+      "status": "available_now",
+      "notes": "Owns memory, session context, skills, MCP orchestration, and final wording."
+    },
+    "chinobot": {
+      "status": "partially_available_live_bridge",
+      "notes": "Owns preferred QQ execution UX and selected office/dev tools. A live callable bridge now exists in OpenClaw, though not every chino_bot capability has been ported yet."
+    }
+  },
+  "capability_families": [
+    {
+      "family": "openclaw_memory",
+      "source": "openclaw",
+      "availability": "available_now",
+      "preferred_backend": "openclaw",
+      "tools": ["memory_search", "memory_get"],
+      "use_for": ["durable recall", "workspace memory", "semantic memory search", "fact lookup from MEMORY.md and memory/*.md"]
+    },
+    {
+      "family": "openclaw_sessions",
+      "source": "openclaw",
+      "availability": "available_now",
+      "preferred_backend": "openclaw",
+      "tools": ["sessions_list", "sessions_history", "sessions_send", "sessions_spawn"],
+      "use_for": ["session orchestration", "sub-agents", "cross-session messaging", "background task routing"]
+    },
+    {
+      "family": "openclaw_runtime",
+      "source": "openclaw",
+      "availability": "available_now",
+      "preferred_backend": "openclaw",
+      "tools": ["browser", "cron", "nodes"],
+      "use_for": ["browser automation", "scheduled automation", "device and node commands"]
+    },
+    {
+      "family": "openclaw_qq_native_compat",
+      "source": "openclaw",
+      "availability": "available_now",
+      "preferred_backend": "chinobot",
+      "role": "compatibility_fallback",
+      "tools": [
+        "qq_user_info",
+        "qq_group_members",
+        "qq_send_like",
+        "qq_send_poke",
+        "qq_send_image",
+        "qq_send_voice",
+        "qq_send_mention",
+        "qq_recall_message",
+        "qq_group_files_list",
+        "qq_group_file_download",
+        "qq_send_file",
+        "qq_make_meme"
+      ],
+      "notes": "Use only for still-unwrapped edge cases. In QQ group 673105016, overlapping legacy qq_* tools are group-denied once a chinobot_* wrapper exists."
+    },
+    {
+      "family": "chinobot_qq_interaction",
+      "source": "chinobot",
+      "availability": "partially_available",
+      "preferred_backend": "chinobot",
+      "bridge_tools": [
+        "chinobot_get_user_info",
+        "chinobot_analyze_avatar",
+        "chinobot_get_self_info",
+        "chinobot_get_group_info",
+        "chinobot_send_like",
+        "chinobot_send_poke",
+        "chinobot_set_group_ban",
+        "chinobot_set_group_whole_ban",
+        "chinobot_set_group_kick",
+        "chinobot_set_group_admin",
+        "chinobot_set_group_special_title",
+        "chinobot_get_group_members",
+        "chinobot_get_group_member_info",
+        "chinobot_get_group_files",
+        "chinobot_get_group_file_info",
+        "chinobot_get_group_file_url",
+        "chinobot_download_group_file",
+        "chinobot_upload_group_file",
+        "chinobot_packet_status",
+        "chinobot_search_image",
+        "chinobot_send_mention",
+        "chinobot_send_image",
+        "chinobot_send_voice",
+        "chinobot_make_meme",
+        "chinobot_send_file",
+        "chinobot_recall_message",
+        "chinobot_send_fake_message",
+        "chinobot_create_fake_dialogue"
+      ],
+      "planned_bridge": [
+        "send_like",
+        "get_user_info",
+        "get_group_member_info",
+        "upload_group_file",
+        "get_group_files",
+        "send_file",
+        "send_fake_message",
+        "create_fake_dialogue"
+      ],
+      "use_for": ["QQ self info", "QQ group info", "QQ user info", "QQ avatar analysis", "QQ group member list", "QQ member info", "QQ likes", "QQ poke / 戳一戳", "QQ group moderation (mute/whole mute/kick/set admin/special title)", "group file upload/list/url/download", "packet diagnostics", "mention send", "image send", "voice send", "meme creation", "message recall", "file send", "fake message features"]
+    },
+    {
+      "family": "chinobot_comms",
+      "source": "chinobot",
+      "availability": "available_now",
+      "preferred_backend": "chinobot",
+      "bridge_tools": ["chinobot_send_email", "chinobot_receive_email"],
+      "planned_bridge": ["send_email", "receive_email"],
+      "use_for": ["email sending", "mailbox retrieval"]
+    },
+    {
+      "family": "chinobot_search_and_render",
+      "source": "chinobot",
+      "availability": "available_now",
+      "preferred_backend": "chinobot",
+      "bridge_tools": ["chinobot_parse_link", "chinobot_tavily_search", "chinobot_search_image", "chinobot_render_html", "chinobot_web_screenshot"],
+      "planned_bridge": [],
+      "use_for": ["link parsing", "live web search", "image search", "HTML rendering", "web screenshots"]
+    },
+    {
+      "family": "chinobot_documents",
+      "source": "chinobot",
+      "availability": "available_now",
+      "preferred_backend": "chinobot",
+      "bridge_tools": [
+        "chinobot_read_pdf",
+        "chinobot_read_word",
+        "chinobot_create_word",
+        "chinobot_read_excel",
+        "chinobot_create_excel",
+        "chinobot_convert_word_to_pdf",
+        "chinobot_convert_pdf_to_word"
+      ],
+      "planned_bridge": [],
+      "use_for": ["document parsing", "document generation", "office conversion"]
+    },
+    {
+      "family": "chinobot_workflow_and_ops",
+      "source": "chinobot",
+      "availability": "reference_only",
+      "preferred_backend": "chinobot",
+      "planned_bridge": ["create_workflow", "view_logs", "check_system_status", "delete_file", "clean_temp_files"],
+      "use_for": ["workflow orchestration", "runtime logs", "system diagnostics", "temp file cleanup"]
+    }
+  ],
+  "selection_rules": [
+    "OpenClaw memory and session tools always beat chino_bot memory-like features.",
+    "For QQ actions, chino_bot is the target backend; OpenClaw QQ tools are fallback only during migration.",
+    "For communication and document utility families, prefer chino_bot once a callable bridge exists.",
+    "OpenClaw keeps primary ownership of code analysis, test running, and task planning.",
+    "If a chino_bot family is marked reference_only, do not pretend the bridge tool already exists."
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "id": "qq-natural",
+  "channels": ["qq"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "voiceSynthesis": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": false
+          },
+          "projectRoot": {
+            "type": "string",
+            "default": "../voice/qwen3-tts-apple-silicon"
+          },
+          "pythonPath": {
+            "type": "string",
+            "default": "python3"
+          },
+          "scriptPath": {
+            "type": "string",
+            "default": "../voice/qwen3-tts-apple-silicon/openclaw_clone_tts.py"
+          },
+          "modelPath": {
+            "type": "string",
+            "default": "../voice/qwen3-tts-apple-silicon/models/Qwen3-TTS-12Hz-1.7B-Base-8bit"
+          },
+          "voiceName": {
+            "type": "string",
+            "default": "akari2"
+          },
+          "timeoutMs": {
+            "type": "number",
+            "default": 120000,
+            "minimum": 1000,
+            "maximum": 300000
+          },
+          "fallbackToSystemSay": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    }
+  }
+}

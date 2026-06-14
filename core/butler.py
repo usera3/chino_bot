@@ -6,15 +6,24 @@ from langchain.tools import BaseTool
 from typing import Optional
 from .dual_vector_store import DualVectorStore
 from .knowledge_extractor import KnowledgeExtractor
+from .openclaw_style import (
+    build_openclaw_runtime_system_prompt,
+    build_style_context,
+    history_message_limit,
+    inject_relevant_memory,
+    normalize_reply_text,
+    should_lookup_memory,
+    strip_system_context,
+)
 
 
 class Butler:
     """智能管家 - 基于 LangGraph ReAct Agent"""
-    
+
     def __init__(
-        self, 
-        llm, 
-        tools: list[BaseTool], 
+        self,
+        llm,
+        tools: list[BaseTool],
         verbose: bool = True,
         use_dual_memory: bool = True,
         memory_path: str = "./data",
@@ -22,7 +31,7 @@ class Butler:
     ):
         """
         初始化管家
-        
+
         Args:
             llm: 大语言模型
             tools: 工具列表
@@ -35,11 +44,11 @@ class Butler:
         self.tools = tools
         self.verbose = verbose
         self.use_dual_memory = use_dual_memory
-        
+
         # 初始化双向量库（对话库 + 知识库）
         self.dual_store = None
         self.knowledge_extractor = None
-        
+
         if use_dual_memory:
             try:
                 self.dual_store = DualVectorStore(
@@ -52,7 +61,7 @@ class Butler:
                 print(f"⚠️ 双向量库初始化失败: {e}")
                 print("⚠️ 将继续使用短期记忆")
                 self.use_dual_memory = False
-        
+
         # 创建系统 Prompt
         self.system_prompt = """你是智乃（香风智乃），一个安静内向的女孩子。
 
@@ -236,7 +245,7 @@ class Butler:
 - **发送附件**：用户说"把这个文件发到邮箱" → 调用时传入 `attachment_path` 参数
   * 如果用户刚上传了文件，文件通常在 `~/Downloads/文件名`
   * 如果用户提到之前的文件，尝试从历史记忆中找到文件路径
-  * 附件路径示例：`~/Downloads/test_send_document.docx`
+  * 附件路径示例：`/absolute/path/to/test_send_document.docx`
 
 **时间工具（get_time）**
 - 用户问"现在几点" → 调用工具
@@ -306,7 +315,7 @@ class Butler:
 - **write_project_file** - 写入项目文件（⚠️ 危险操作，需要管理员权限）
   * 用户说"创建一个新工具" → 调用工具
   * 用户说"修改 xxx 文件" → 调用工具
-  * **只有管理员（QQ: 123456789）可以执行**
+  * **只有管理员可以执行**
   * 所有操作会被审计记录
   * 建议先备份重要文件
 - **list_project_files** - 列出项目文件
@@ -345,8 +354,8 @@ class Butler:
 ```
 
 ⚠️ **安全限制**：
-- 所有文件操作只能在项目目录内（`/path/to/chino_bot`）
-- 写入操作需要管理员权限（QQ: 123456789）
+- 所有文件操作只能在项目目录内（由 `CHINO_PROJECT_ROOT` 或当前工作目录决定）
+- 写入操作需要管理员权限
 - 所有操作会被记录到审计日志（`logs/audit.log`）
 - 不能访问项目外的文件
 
@@ -606,123 +615,194 @@ class Butler:
 - "你这想法还挺有意思的"（可以轻微调侃）
 
 记住：你是朋友，不是客服。保持真实、轻松、简洁！"""
-        
+
         # 创建 Agent（使用 LangGraph）
-        self.agent = create_react_agent(
-            model=self.llm,
-            tools=self.tools,
-            prompt=self.system_prompt  # 修改参数名
+        self.base_system_prompt = self.system_prompt
+        self._agent_cache = {}
+        self.agent = self._get_agent(self.base_system_prompt)
+
+        # 对话历史（按用户ID分组）
+        self.chat_histories = {}  # {user_id: [messages]}
+
+    def _get_agent(self, system_prompt: str):
+        """按 prompt 缓存 Agent，便于根据场景动态切换聊天风格。"""
+
+        agent = self._agent_cache.get(system_prompt)
+        if agent is None:
+            agent = create_react_agent(
+                model=self.llm,
+                tools=self.tools,
+                prompt=system_prompt,
+            )
+            self._agent_cache[system_prompt] = agent
+        return agent
+
+    def _get_chat_history(self, user_id: str):
+        """获取或初始化某个用户的短期对话历史。"""
+
+        if user_id not in self.chat_histories:
+            self.chat_histories[user_id] = []
+        return self.chat_histories[user_id]
+
+    def _build_runtime_prompt(self, user_input: str, conversation_context: Optional[dict]):
+        """基于 QQ 场景附加 OpenClaw 风格约束。"""
+
+        style_context = build_style_context(conversation_context)
+        runtime_prompt = build_openclaw_runtime_system_prompt(
+            self.base_system_prompt,
+            user_input,
+            style_context,
         )
-        
-        # 对话历史
-        self.chat_history = []
-    
-    def process(self, user_input: str, user_id: str = "default_user") -> str:
+        self.system_prompt = runtime_prompt
+        return runtime_prompt, style_context
+
+    def _get_relevant_context(self, user_input: str, user_id: str, style_context) -> str:
+        """只在当前消息明显依赖过去上下文时才检索长期记忆。"""
+
+        if not (self.use_dual_memory and self.dual_store):
+            return ""
+
+        plain_user_input = strip_system_context(user_input)
+        if not should_lookup_memory(plain_user_input, style_context):
+            return ""
+
+        relevant_context = self.dual_store.get_relevant_context(
+            query=plain_user_input,
+            user_id=user_id,
+            k_conversations=3,
+            k_knowledge=2,
+            k_recent=20,
+        )
+
+        if self.verbose and relevant_context and "没有找到" not in relevant_context:
+            print(f"\n📚 检索到相关历史记忆:")
+            print(f"{relevant_context[:200]}...")
+
+        return relevant_context
+
+    def _prepare_input_with_memory(self, user_input: str, relevant_context: str) -> str:
+        """将长期记忆作为安静的内部参考注入，而不是直接喂成作文。"""
+
+        if relevant_context and "没有找到" not in relevant_context:
+            return inject_relevant_memory(user_input, relevant_context)
+        return user_input
+
+    def _extract_message_text(self, content) -> str:
+        """兼容不同模型返回的 content 结构。"""
+
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts = []
+            for item in content:
+                if isinstance(item, dict):
+                    text = item.get("text") or item.get("content")
+                    if isinstance(text, str) and text.strip():
+                        parts.append(text.strip())
+                elif isinstance(item, str) and item.strip():
+                    parts.append(item.strip())
+            return "\n".join(parts).strip()
+        return str(content).strip()
+
+    def _save_to_memory(
+        self,
+        user_input: str,
+        response: str,
+        user_id: str,
+        image_count: int = 0,
+    ):
+        """保存短期结果到长期记忆系统。"""
+
+        if not (self.use_dual_memory and self.dual_store):
+            return
+
+        original_user_input = strip_system_context(user_input)
+        conversation_input = (
+            f"{original_user_input} [附带{image_count}张图片]"
+            if image_count > 0
+            else original_user_input
+        )
+
+        self.dual_store.add_conversation(
+            user_input=conversation_input,
+            bot_response=response,
+            user_id=user_id,
+        )
+
+        if not self.knowledge_extractor:
+            if self.verbose:
+                print(f"💾 已保存到长期记忆（对话）")
+            return
+
+        knowledge = self.knowledge_extractor.extract_knowledge(
+            user_input=original_user_input,
+            bot_response=response,
+            user_id=user_id,
+        )
+
+        if knowledge:
+            self.dual_store.add_knowledge(
+                knowledge=knowledge,
+                user_id=user_id,
+            )
+            if self.verbose:
+                print(f"💾 已保存到长期记忆（对话 + 知识）")
+        elif self.verbose:
+            print(f"💾 已保存到长期记忆（对话）")
+
+    def process(
+        self,
+        user_input: str,
+        user_id: str = "default_user",
+        conversation_context: Optional[dict] = None,
+    ) -> str:
         """
         处理用户输入
-        
+
         Args:
             user_input: 用户输入
             user_id: 用户ID
-            
+            conversation_context: 对话上下文
+
         Returns:
             机器人回复
         """
         try:
-            # 1. 检索长期记忆
-            relevant_context = ""
-            
-            if self.use_dual_memory and self.dual_store:
-                relevant_context = self.dual_store.get_relevant_context(
-                    query=user_input,
-                    user_id=user_id,
-                    k_conversations=3,  # 向量检索对话数量
-                    k_knowledge=2,      # 知识检索数量
-                    k_recent=20         # 最近对话数量
-                )
-                
-                if self.verbose and relevant_context and "没有找到" not in relevant_context:
-                    print(f"\n📚 检索到相关历史记忆:")
-                    print(f"{relevant_context[:200]}...")
-            
-            # 2. 构建增强的输入
-            enhanced_input = user_input
-            
-            if relevant_context and "没有找到" not in relevant_context:
-                # 注入历史记忆
-                enhanced_input = f"[参考历史对话]\n{relevant_context}\n\n[当前消息]\n{user_input}"
-            
-            # 3. 构建对话上下文
-            messages = []
-            
-            # 添加系统提示词
-            messages.append(SystemMessage(content=self.system_prompt))
-            
-            # 添加最近的对话（保留最近6条消息，即3轮对话）
-            if len(self.chat_history) > 0:
-                recent_messages = self.chat_history[-6:] if len(self.chat_history) >= 6 else self.chat_history
-                messages.extend(recent_messages)
-            
-            # 添加当前用户消息
+            runtime_prompt, style_context = self._build_runtime_prompt(
+                user_input,
+                conversation_context,
+            )
+            relevant_context = self._get_relevant_context(user_input, user_id, style_context)
+            enhanced_input = self._prepare_input_with_memory(user_input, relevant_context)
+
+            chat_history = self._get_chat_history(user_id)
+            history_limit = history_message_limit(user_input, style_context)
+            messages = [SystemMessage(content=runtime_prompt)]
+            if chat_history:
+                messages.extend(chat_history[-history_limit:])
+
             current_message = HumanMessage(content=enhanced_input)
             messages.append(current_message)
-            
-            # 4. 执行 Agent
-            result = self.agent.invoke({
-                "messages": messages
-            })
-            
-            # 5. 更新 chat_history
-            self.chat_history.append(current_message)
+
+            agent = self._get_agent(runtime_prompt)
+            result = agent.invoke({"messages": messages})
+
             ai_message = result["messages"][-1]
-            self.chat_history.append(ai_message)
-            
-            # 6. 智能清理 chat_history（保留最近20条消息）
-            if len(self.chat_history) > 20:
-                self.chat_history = self.chat_history[-20:]
-            
-            # 7. 获取 AI 回复
-            response = ai_message.content
-            
-            # 8. 保存到长期记忆
-            if self.use_dual_memory and self.dual_store:
-                # 提取原始用户输入（去掉系统提示）
-                original_user_input = user_input
-                if "[系统提示：" in user_input and "]\n\n" in user_input:
-                    # 去掉系统提示部分
-                    original_user_input = user_input.split("]\n\n", 1)[1] if "]\n\n" in user_input else user_input
-                
-                # 保存对话到对话库
-                self.dual_store.add_conversation(
-                    user_input=original_user_input,
-                    bot_response=response,
-                    user_id=user_id
-                )
-                
-                # 提取并保存知识到知识库
-                if self.knowledge_extractor:
-                    knowledge = self.knowledge_extractor.extract_knowledge(
-                        user_input=original_user_input,
-                        bot_response=response,
-                        user_id=user_id
-                    )
-                    
-                    if knowledge:
-                        self.dual_store.add_knowledge(
-                            knowledge=knowledge,
-                            user_id=user_id
-                        )
-                        
-                        if self.verbose:
-                            print(f"💾 已保存到长期记忆（对话 + 知识）")
-                    else:
-                        if self.verbose:
-                            print(f"💾 已保存到长期记忆（对话）")
-                else:
-                    if self.verbose:
-                        print(f"💾 已保存到长期记忆（对话）")
-            
-            # 9. 显示推理过程
+            response = normalize_reply_text(
+                self._extract_message_text(ai_message.content),
+                user_input,
+                style_context,
+            )
+            ai_message.content = response
+
+            chat_history.append(current_message)
+            chat_history.append(ai_message)
+            retained_limit = max(20, history_limit * 2)
+            if len(chat_history) > retained_limit:
+                self.chat_histories[user_id] = chat_history[-retained_limit:]
+
+            self._save_to_memory(user_input, response, user_id)
+
             if self.verbose:
                 print(f"\n🤖 Agent 推理过程:")
                 for msg in result["messages"][len(messages):]:
@@ -733,119 +813,217 @@ class Butler:
                     elif hasattr(msg, 'content') and msg.content:
                         if msg.type == 'tool':
                             print(f"   📤 工具输出: {msg.content[:100]}...")
-            
+
             return response
-        
+
         except Exception as e:
             import traceback
             traceback.print_exc()
             return f"抱歉，我遇到了一些问题：{str(e)}"
-    
-    async def aprocess(self, user_input: str, user_id: str = "default_user") -> str:
+
+    async def aprocess_with_images(
+        self,
+        user_input: str,
+        image_urls: list[str],
+        user_id: str = "default_user",
+        conversation_context: Optional[dict] = None,
+    ) -> str:
+        """
+        异步处理带图片的用户输入（使用 Pixtral 原生多模态）
+
+        Args:
+            user_input: 用户输入
+            image_urls: 图片 URL 列表
+            user_id: 用户ID
+            conversation_context: 对话上下文
+
+        Returns:
+            机器人回复
+        """
+        try:
+            import requests
+            import base64
+            from io import BytesIO
+            import urllib3
+            import os
+
+            # 禁用 SSL 警告
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+            # 获取代理配置
+            use_proxy = os.getenv("USE_PROXY", "false").lower() == "true"
+            proxies = None
+            if use_proxy:
+                http_proxy = os.getenv("HTTP_PROXY", "")
+                https_proxy = os.getenv("HTTPS_PROXY", "")
+                if http_proxy and https_proxy:
+                    proxies = {
+                        'http': http_proxy,
+                        'https': https_proxy,
+                    }
+                    if self.verbose:
+                        print(f"🌐 使用代理下载图片: {http_proxy}")
+
+            # 1. 下载图片并转换为 base64
+            base64_images = []
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+
+            for img_url in image_urls:
+                try:
+                    # 下载图片（禁用 SSL 验证以避免证书问题，添加 User-Agent，使用代理）
+                    response = requests.get(
+                        img_url,
+                        timeout=10,
+                        verify=False,
+                        headers=headers,
+                        proxies=proxies
+                    )
+                    if response.status_code == 200:
+                        # 转换为 base64
+                        img_base64 = base64.b64encode(response.content).decode('utf-8')
+                        base64_images.append(img_base64)
+                        print(f"✅ 图片已下载并编码: {img_url[:60]}...")
+                    else:
+                        print(f"⚠️ 图片下载失败 (状态码 {response.status_code}): {img_url}")
+                except Exception as e:
+                    print(f"⚠️ 图片处理失败: {e}")
+
+            runtime_prompt, style_context = self._build_runtime_prompt(
+                user_input,
+                conversation_context,
+            )
+            relevant_context = self._get_relevant_context(user_input, user_id, style_context)
+            enhanced_input = self._prepare_input_with_memory(user_input, relevant_context)
+
+            if not base64_images:
+                # 如果没有成功处理的图片，回退到普通文本处理
+                return await self.aprocess(
+                    user_input,
+                    user_id=user_id,
+                    conversation_context=conversation_context,
+                )
+
+            # 2. 构建多模态消息内容
+            content = [
+                {
+                    "type": "text",
+                    "text": enhanced_input
+                }
+            ]
+
+            # 添加所有图片
+            for img_base64 in base64_images:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{img_base64}"
+                    }
+                })
+
+            # 3. 构建消息
+            chat_history = self._get_chat_history(user_id)
+            history_limit = history_message_limit(user_input, style_context)
+            messages = [SystemMessage(content=runtime_prompt)]
+            if chat_history:
+                messages.extend(chat_history[-history_limit:])
+
+            # 添加当前多模态消息
+            current_message = HumanMessage(content=content)
+            messages.append(current_message)
+
+            # 6. 直接调用 LLM（不使用 Agent，因为图像识别不需要工具）
+            print(f"🖼️ 使用 Pixtral 处理 {len(base64_images)} 张图片...")
+
+            # 直接调用 LLM 的 ainvoke 方法
+            ai_message = await self.llm.ainvoke(messages)
+
+            # 7. 更新 chat_history
+            response = normalize_reply_text(
+                self._extract_message_text(ai_message.content),
+                user_input,
+                style_context,
+            )
+            ai_message.content = response
+
+            chat_history.append(current_message)
+            chat_history.append(ai_message)
+
+            retained_limit = max(20, history_limit * 2)
+            if len(chat_history) > retained_limit:
+                self.chat_histories[user_id] = chat_history[-retained_limit:]
+
+            # 8. 保存到长期记忆
+            self._save_to_memory(
+                user_input,
+                response,
+                user_id,
+                image_count=len(base64_images),
+            )
+
+            return response
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return f"抱歉，处理图片时遇到了问题：{str(e)}"
+
+    async def aprocess(
+        self,
+        user_input: str,
+        user_id: str = "default_user",
+        conversation_context: Optional[dict] = None,
+    ) -> str:
         """
         异步处理用户输入
-        
+
         Args:
             user_input: 用户输入
             user_id: 用户ID
-            
+            conversation_context: 对话上下文
+
         Returns:
             机器人回复
         """
         try:
-            # 1. 检索长期记忆
-            relevant_context = ""
-            
-            if self.use_dual_memory and self.dual_store:
-                relevant_context = self.dual_store.get_relevant_context(
-                    query=user_input,
-                    user_id=user_id,
-                    k_conversations=3,  # 向量检索对话数量
-                    k_knowledge=2,      # 知识检索数量
-                    k_recent=20         # 最近对话数量
-                )
-                
-                if self.verbose and relevant_context and "没有找到" not in relevant_context:
-                    print(f"\n📚 检索到相关历史记忆:")
-                    print(f"{relevant_context[:200]}...")
-            
-            # 2. 构建增强的输入
-            enhanced_input = user_input
-            
-            if relevant_context and "没有找到" not in relevant_context:
-                # 注入历史记忆
-                enhanced_input = f"[参考历史对话]\n{relevant_context}\n\n[当前消息]\n{user_input}"
-            
-            # 3. 构建对话上下文
-            messages = []
-            
-            # 添加系统提示词
-            messages.append(SystemMessage(content=self.system_prompt))
-            
-            # 添加最近的对话（保留最近6条消息，即3轮对话）
-            if len(self.chat_history) > 0:
-                recent_messages = self.chat_history[-6:] if len(self.chat_history) >= 6 else self.chat_history
-                messages.extend(recent_messages)
-            
-            # 添加当前用户消息
+            runtime_prompt, style_context = self._build_runtime_prompt(
+                user_input,
+                conversation_context,
+            )
+            relevant_context = self._get_relevant_context(user_input, user_id, style_context)
+            enhanced_input = self._prepare_input_with_memory(user_input, relevant_context)
+
+            chat_history = self._get_chat_history(user_id)
+            history_limit = history_message_limit(user_input, style_context)
+
+            messages = [SystemMessage(content=runtime_prompt)]
+            if chat_history:
+                messages.extend(chat_history[-history_limit:])
+
             current_message = HumanMessage(content=enhanced_input)
             messages.append(current_message)
-            
-            # 4. 异步执行 Agent
-            result = await self.agent.ainvoke({
-                "messages": messages
-            })
-            
-            # 5. 更新 chat_history
-            self.chat_history.append(current_message)
+
+            agent = self._get_agent(runtime_prompt)
+            result = await agent.ainvoke({"messages": messages})
+
             ai_message = result["messages"][-1]
-            self.chat_history.append(ai_message)
-            
-            # 6. 智能清理 chat_history（保留最近20条消息）
-            if len(self.chat_history) > 20:
-                self.chat_history = self.chat_history[-20:]
-            
-            # 7. 获取 AI 回复
-            response = ai_message.content
-            
-            # 8. 保存到长期记忆
-            if self.use_dual_memory and self.dual_store:
-                # 提取原始用户输入（去掉系统提示）
-                original_user_input = user_input
-                if "[系统提示：" in user_input and "]\n\n" in user_input:
-                    # 去掉系统提示部分
-                    original_user_input = user_input.split("]\n\n", 1)[1] if "]\n\n" in user_input else user_input
-                
-                # 保存对话到对话库
-                self.dual_store.add_conversation(
-                    user_input=original_user_input,
-                    bot_response=response,
-                    user_id=user_id
-                )
-                
-                # 提取并保存知识到知识库
-                if self.knowledge_extractor:
-                    knowledge = self.knowledge_extractor.extract_knowledge(
-                        user_input=original_user_input,
-                        bot_response=response,
-                        user_id=user_id
-                    )
-                    
-                    if knowledge:
-                        self.dual_store.add_knowledge(
-                            knowledge=knowledge,
-                            user_id=user_id
-                        )
-                        
-                        if self.verbose:
-                            print(f"💾 已保存到长期记忆（对话 + 知识）")
-                    else:
-                        if self.verbose:
-                            print(f"💾 已保存到长期记忆（对话）")
-                else:
-                    if self.verbose:
-                        print(f"💾 已保存到长期记忆（对话）")
-            
+            response = normalize_reply_text(
+                self._extract_message_text(ai_message.content),
+                user_input,
+                style_context,
+            )
+            ai_message.content = response
+
+            chat_history.append(current_message)
+            chat_history.append(ai_message)
+
+            retained_limit = max(20, history_limit * 2)
+            if len(chat_history) > retained_limit:
+                self.chat_histories[user_id] = chat_history[-retained_limit:]
+
+            self._save_to_memory(user_input, response, user_id)
+
             # 9. 显示推理过程
             if self.verbose:
                 print(f"\n🤖 Agent 推理过程:")
@@ -857,27 +1035,36 @@ class Butler:
                     elif hasattr(msg, 'content') and msg.content:
                         if msg.type == 'tool':
                             print(f"   📤 工具输出: {msg.content[:100]}...")
-            
+
             return response
-        
+
         except Exception as e:
             import traceback
             traceback.print_exc()
             return f"抱歉，我遇到了一些问题：{str(e)}"
-    
-    def clear_memory(self):
+
+    def clear_memory(self, user_id: str = None):
         """清空记忆"""
-        self.chat_history = []
-        print("✅ 短期记忆已清空")
-    
+        if user_id:
+            # 清空指定用户的记忆
+            if user_id in self.chat_histories:
+                self.chat_histories[user_id] = []
+                print(f"✅ 用户 {user_id} 的短期记忆已清空")
+        else:
+            # 清空所有用户的记忆
+            self.chat_histories = {}
+            print("✅ 所有用户的短期记忆已清空")
+
     def get_memory_stats(self) -> dict:
         """获取记忆统计信息"""
+        total_messages = sum(len(history) for history in self.chat_histories.values())
         stats = {
-            "short_term_messages": len(self.chat_history),
+            "short_term_users": len(self.chat_histories),
+            "short_term_messages": total_messages,
             "long_term_enabled": self.use_dual_memory
         }
-        
+
         if self.use_dual_memory and self.dual_store:
             stats.update(self.dual_store.get_stats())
-        
+
         return stats

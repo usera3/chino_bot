@@ -1,0 +1,23 @@
+{
+  "name": "@openclaw/chinobot-bridge",
+  "version": "2026.4.3",
+  "private": true,
+  "description": "OpenClaw bridge for selected chino_bot capabilities",
+  "type": "module",
+  "devDependencies": {
+    "openclaw": "workspace:*"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.3.11"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

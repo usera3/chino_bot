@@ -1,0 +1,73 @@
+{
+  "id": "bota-recorder",
+  "name": "Bota Recorder",
+  "description": "Control a local Bota recording pen over BLE via the existing Python gateway.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectRoot": {
+        "type": "string",
+        "default": "/Users/mozi100/PycharmProjects/PythonProject6"
+      },
+      "pythonPath": {
+        "type": "string",
+        "default": "/Users/mozi100/PycharmProjects/PythonProject6/firmware/host_tools/.venv-mac/bin/python"
+      },
+      "host": {
+        "type": "string",
+        "default": "127.0.0.1"
+      },
+      "port": {
+        "type": "number",
+        "default": 8008,
+        "minimum": 1,
+        "maximum": 65535
+      },
+      "autoStart": {
+        "type": "boolean",
+        "default": true
+      },
+      "startupTimeoutMs": {
+        "type": "number",
+        "default": 20000,
+        "minimum": 1000,
+        "maximum": 120000
+      },
+      "defaultNameContains": {
+        "type": "string",
+        "default": "Bota"
+      }
+    }
+  },
+  "uiHints": {
+    "projectRoot": {
+      "label": "Firmware Project Root",
+      "help": "Root directory that contains the firmware package used by the Python BLE gateway."
+    },
+    "pythonPath": {
+      "label": "Python Path",
+      "help": "Python interpreter used to launch the local Bota BLE gateway."
+    },
+    "host": {
+      "label": "Gateway Host",
+      "help": "Loopback address for the local Bota BLE gateway."
+    },
+    "port": {
+      "label": "Gateway Port",
+      "help": "HTTP port for the local Bota BLE gateway."
+    },
+    "autoStart": {
+      "label": "Auto Start Gateway",
+      "help": "When enabled, OpenClaw will launch the local Python BLE gateway on first use."
+    },
+    "startupTimeoutMs": {
+      "label": "Gateway Startup Timeout",
+      "help": "How long OpenClaw should wait for the local BLE gateway to become healthy."
+    },
+    "defaultNameContains": {
+      "label": "Default BLE Name Filter",
+      "help": "Default BLE device-name substring used when connecting without an explicit address."
+    }
+  }
+}

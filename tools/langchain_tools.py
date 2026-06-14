@@ -186,12 +186,13 @@ def get_all_langchain_tools():
         tools.append(python_tool)
         print("✅ 已加载: Python REPL 工具")
     
-    # 4. 图像识别（Qwen-VL）
-    from .vision_tool import get_vision_tool
-    vision_tool = get_vision_tool()
-    if vision_tool:
-        tools.append(vision_tool)
-        print("✅ 已加载: 图像识别工具 (Qwen-VL)")
+    # 4. 图像识别（Qwen-VL）- 已禁用，改用 Pixtral 原生多模态
+    # from .vision_tool import get_vision_tool
+    # vision_tool = get_vision_tool()
+    # if vision_tool:
+    #     tools.append(vision_tool)
+    #     print("✅ 已加载: 图像识别工具 (Qwen-VL)")
+    print("ℹ️  图像识别: 使用 Pixtral 原生多模态（无需单独工具）")
     
     # 5. 定时任务（旧版，保留兼容）
     from .scheduler_tool import get_scheduler_tool

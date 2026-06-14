@@ -37,7 +37,7 @@ async def test_natural_responses():
         llm=llm,
         tools=tools,
         verbose=False,
-        use_vector_store=False  # 禁用长期记忆，专注测试回复风格
+        use_dual_memory=False  # 禁用长期记忆，专注测试回复风格
     )
     
     # 测试用例

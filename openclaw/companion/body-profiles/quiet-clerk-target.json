@@ -1,0 +1,27 @@
+{
+  "name": "Quiet Clerk Target",
+  "slug": "quiet-clerk-target",
+  "description": "Target body specification for the long-term OpenClaw companion. This is not an imported model yet; it is the visual target to optimize for.",
+  "visualRole": "target-spec",
+  "targetTraits": {
+    "silhouette": "small to medium desktop companion, readable in a screen corner",
+    "mood": "quiet, attentive, restrained",
+    "style": "cafe clerk / study desk / evening lamp",
+    "colors": [
+      "deep navy",
+      "cream",
+      "muted wood",
+      "glass blue accents"
+    ],
+    "avoid": [
+      "idol-stage costume language",
+      "streamer clutter",
+      "overly childish mascot shape",
+      "high-energy default expression"
+    ]
+  },
+  "notes": [
+    "This profile exists so the body choice stays anchored to the character thesis.",
+    "Do not replace the shell with any model that contradicts the quiet attendant direction."
+  ]
+}
